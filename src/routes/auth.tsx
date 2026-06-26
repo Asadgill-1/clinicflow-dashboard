@@ -19,7 +19,7 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (status === "ready") return <Navigate to="/overview" />;
+  if (status === "ready") return <Navigate to="/" />;
   if (status === "no_access") return <Navigate to="/no-access" />;
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -29,7 +29,7 @@ function AuthPage() {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) setError(error);
-    else navigate({ to: "/overview" });
+    else navigate({ to: "/" });
   };
 
   return (
