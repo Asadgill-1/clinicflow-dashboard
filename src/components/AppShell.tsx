@@ -41,7 +41,9 @@ export function AppShell() {
         <nav className="flex-1 p-2" aria-label="Primary">
           <ul className="space-y-1">
             {items.map((item) => {
-              const active = pathname === item.to || pathname.startsWith(item.to + "/");
+              const active = item.exact
+                ? pathname === item.to
+                : pathname === item.to || pathname.startsWith(item.to + "/");
               const Icon = item.icon;
               return (
                 <li key={item.to}>
@@ -95,7 +97,9 @@ export function AppShell() {
         <nav className="md:hidden border-b border-border bg-card overflow-x-auto" aria-label="Primary mobile">
           <ul className="flex gap-1 px-2 py-2">
             {items.map((item) => {
-              const active = pathname === item.to || pathname.startsWith(item.to + "/");
+              const active = item.exact
+                ? pathname === item.to
+                : pathname === item.to || pathname.startsWith(item.to + "/");
               const Icon = item.icon;
               return (
                 <li key={item.to}>
