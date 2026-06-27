@@ -2,6 +2,7 @@ import type { Role } from "@/lib/types";
 import {
   LayoutDashboard,
   CalendarDays,
+  MessagesSquare,
   Users,
   Star,
   Settings,
@@ -21,6 +22,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutDashboard, roles: ["owner", "doctor", "receptionist"], exact: true },
   { to: "/appointments", label: "Appointments", icon: CalendarDays, roles: ["owner", "doctor", "receptionist"] },
+  { to: "/inbox", label: "Inbox", icon: MessagesSquare, roles: ["owner", "doctor", "receptionist"] },
   { to: "/patients", label: "Patients", icon: Users, roles: ["owner", "doctor", "receptionist"] },
   { to: "/reviews", label: "Reviews", icon: Star, roles: ["owner", "doctor", "receptionist"] },
   { to: "/staff", label: "Staff", icon: UserCog, roles: ["owner"] },
