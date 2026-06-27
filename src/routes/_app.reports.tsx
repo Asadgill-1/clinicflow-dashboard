@@ -25,12 +25,12 @@ const DUBAI_TZ = "Asia/Dubai";
 
 // Use semantic tokens via CSS variables (defined in styles.css)
 const COLORS = {
-  primary: "hsl(var(--primary))",
-  success: "hsl(var(--success))",
-  destructive: "hsl(var(--destructive))",
-  warning: "hsl(var(--warning))",
-  muted: "hsl(var(--muted-foreground))",
-  border: "hsl(var(--border))",
+  primary: "var(--primary)",
+  success: "var(--success)",
+  destructive: "var(--destructive)",
+  warning: "var(--warning)",
+  muted: "var(--muted-foreground)",
+  border: "var(--border)",
 };
 
 function ReportsPage() {
