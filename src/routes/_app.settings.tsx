@@ -18,7 +18,6 @@ export const Route = createFileRoute("/_app/settings")({
 });
 
 interface ServiceRow { name: string; price: number | string; duration_min: number | string }
-interface FaqRow { question: string; answer: string }
 
 interface Hours {
   mon_thu?: string;
