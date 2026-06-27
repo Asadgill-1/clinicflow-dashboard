@@ -26,9 +26,10 @@ import { callAction, toDubaiISO, type ActionResponse } from "@/lib/api-client";
 import type { Appointment, Patient } from "@/lib/types";
 import {
   MoreHorizontal, ArrowUpDown, CheckCircle2, XCircle, Plus, Loader2,
-  CalendarClock, Ban, Check,
+  CalendarClock, Ban, Check, Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/_app/appointments")({
   component: AppointmentsPage,
