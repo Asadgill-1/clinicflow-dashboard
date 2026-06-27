@@ -1,25 +1,33 @@
-import { SUPABASE_URL } from "./supabase";
+import { supabase } from "./supabase";
+
+export interface ActionResponse<T = Record<string, unknown>> {
+  ok: boolean;
+  reason?: "taken" | "closed" | string;
+  nextFree?: string;
+  appointment_number?: string;
+  message?: string;
+  [k: string]: unknown;
+}
 
 /**
- * Typed action client for backend-side actions that message patients
- * (confirm/cancel/reschedule). Currently a placeholder — UI buttons
- * call this but are disabled with a tooltip until backend wiring lands.
+ * Invoke the `dashboard-api` Supabase Edge Function.
+ * supabase-js automatically attaches the logged-in user's JWT.
  */
-export const apiClient = {
-  async action<T = unknown>(
-    name: string,
-    payload: Record<string, unknown>,
-    accessToken?: string | null,
-  ): Promise<T> {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-handler`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: JSON.stringify({ action: name, payload }),
-    });
-    if (!res.ok) throw new Error(`Action ${name} failed: ${res.status}`);
-    return (await res.json()) as T;
-  },
-};
+export async function callAction<T extends ActionResponse = ActionResponse>(
+  action: string,
+  payload: Record<string, unknown> = {},
+): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("dashboard-api", {
+    body: { action, ...payload },
+  });
+  if (error) throw new Error(error.message || `Action ${action} failed`);
+  return (data ?? { ok: false }) as T;
+}
+
+/**
+ * Build an ISO 8601 datetime string in the Asia/Dubai offset (+04:00, no DST).
+ * date: YYYY-MM-DD, time: HH:mm
+ */
+export function toDubaiISO(date: string, time: string): string {
+  return `${date}T${time.length === 5 ? time + ":00" : time}+04:00`;
+}
