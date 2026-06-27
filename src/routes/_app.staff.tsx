@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
+import { Info } from "lucide-react";
 import type { ClinicUser } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/staff")({
@@ -36,6 +37,12 @@ function StaffPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Staff</h1>
         <p className="text-sm text-muted-foreground">Members with access to this clinic.</p>
       </div>
+
+      <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        <Info className="size-4 mt-0.5 shrink-0" />
+        <span>Staff accounts are managed by your platform administrator.</span>
+      </div>
+
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Members</CardTitle></CardHeader>
         <CardContent>
