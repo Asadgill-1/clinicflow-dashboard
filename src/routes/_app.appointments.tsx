@@ -203,6 +203,7 @@ function AppointmentsPage() {
                     <TableHead className="text-right">Duration</TableHead>
                     <SortableHead onClick={() => toggleSort("status")} active={sortKey === "status"}>Status</SortableHead>
                     <TableHead>Attendance</TableHead>
+                    <TableHead>Token</TableHead>
                     <TableHead className="w-10" aria-label="actions" />
                   </TableRow>
                 </TableHeader>
