@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,9 +26,10 @@ import { callAction, toDubaiISO, type ActionResponse } from "@/lib/api-client";
 import type { Appointment, Patient } from "@/lib/types";
 import {
   MoreHorizontal, ArrowUpDown, CheckCircle2, XCircle, Plus, Loader2,
-  CalendarClock, Ban, Check,
+  CalendarClock, Ban, Check, Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
+
 
 export const Route = createFileRoute("/_app/appointments")({
   component: AppointmentsPage,
@@ -50,7 +51,46 @@ function AppointmentsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [newOpen, setNewOpen] = useState(false);
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
+  const [issueAppt, setIssueAppt] = useState<Appointment | null>(null);
   const [pending, setPending] = useState<{ id: string; kind: string } | null>(null);
+
+  const todayStr = useMemo(
+    () => new Date().toLocaleDateString("en-CA", { timeZone: tz }),
+    [tz],
+  );
+
+  const tokensQ = useQuery({
+    queryKey: ["tokens-today", clinicId, todayStr],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tokens")
+        .select("patient_id, token_number, room_number, doctor_name, status, issued_date, created_at")
+        .eq("clinic_id", clinicId)
+        .eq("issued_date", todayStr);
+      if (error) throw error;
+      const map: Record<string, { token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }> = {};
+      for (const t of (data ?? []) as Array<{ patient_id: string | null; token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }>) {
+        if (!t.patient_id) continue;
+        const prev = map[t.patient_id];
+        if (!prev || new Date(t.created_at) > new Date(prev.created_at)) {
+          map[t.patient_id] = t;
+        }
+      }
+      return map;
+    },
+  });
+
+  useEffect(() => {
+    const ch = supabase
+      .channel(`tokens-appts-${clinicId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tokens", filter: `clinic_id=eq.${clinicId}` },
+        () => qc.invalidateQueries({ queryKey: ["tokens-today", clinicId] }),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [clinicId, qc]);
 
   const apptsQ = useQuery({
     queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir],
@@ -163,6 +203,7 @@ function AppointmentsPage() {
                     <TableHead className="text-right">Duration</TableHead>
                     <SortableHead onClick={() => toggleSort("status")} active={sortKey === "status"}>Status</SortableHead>
                     <TableHead>Attendance</TableHead>
+                    <TableHead>Token</TableHead>
                     <TableHead className="w-10" aria-label="actions" />
                   </TableRow>
                 </TableHeader>
@@ -189,6 +230,12 @@ function AppointmentsPage() {
                             : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell>
+                          <TokenCell
+                            token={tokensQ.data?.[a.patient_id] ?? null}
+                            onIssue={() => setIssueAppt(a)}
+                          />
+                        </TableCell>
+                        <TableCell>
                           <RowActions
                             appt={a}
                             pendingKind={isPending ? pending!.kind : null}
@@ -209,6 +256,7 @@ function AppointmentsPage() {
                               );
                             }}
                             onOpen={() => navigate({ to: "/patients/$id", params: { id: a.patient_id } })}
+                            onIssueToken={() => setIssueAppt(a)}
                           />
                         </TableCell>
                       </TableRow>
@@ -234,6 +282,17 @@ function AppointmentsPage() {
         onOpenChange={(o) => { if (!o) setRescheduleAppt(null); }}
         onDone={() => { setRescheduleAppt(null); refetch(); }}
       />
+
+      <IssueTokenDialog
+        appt={issueAppt}
+        clinicId={clinicId}
+        patientName={issueAppt ? (apptsQ.data?.patientsById[issueAppt.patient_id]?.name ?? null) : null}
+        onOpenChange={(o) => { if (!o) setIssueAppt(null); }}
+        onIssued={() => {
+          setIssueAppt(null);
+          qc.invalidateQueries({ queryKey: ["tokens-today", clinicId] });
+        }}
+      />
     </div>
   );
 }
@@ -252,7 +311,7 @@ function SortableHead({
 }
 
 function RowActions({
-  appt, pendingKind, onConfirm, onCancel, onReschedule, onMarkAttendance, onOpen,
+  appt, pendingKind, onConfirm, onCancel, onReschedule, onMarkAttendance, onOpen, onIssueToken,
 }: {
   appt: Appointment;
   pendingKind: string | null;
@@ -261,6 +320,7 @@ function RowActions({
   onReschedule: () => void;
   onMarkAttendance: (a: "came" | "no_show") => void;
   onOpen: () => void;
+  onIssueToken: () => void;
 }) {
   const busy = pendingKind !== null;
   const Spin = <Loader2 className="size-4 mr-2 animate-spin" />;
@@ -273,6 +333,9 @@ function RowActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem onSelect={onOpen}>Open patient</DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onIssueToken(); }}>
+          <Ticket className="size-4 mr-2 text-primary" /> Issue token
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={busy || appt.status === "confirmed" || appt.status === "cancelled"}
@@ -588,6 +651,186 @@ function NewAppointmentDialog({
           <Button onClick={() => submit()} disabled={submitting}>
             {submitting && <Loader2 className="size-4 mr-1 animate-spin" />}
             Book appointment
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Token cell ---------------- */
+
+interface TokenRow {
+  token_number: number;
+  room_number: string | null;
+  doctor_name: string | null;
+  status: string;
+}
+
+function statusDotClass(s: string) {
+  if (s === "serving") return "bg-primary";
+  if (s === "waiting") return "bg-warning";
+  if (s === "done") return "bg-success";
+  if (s === "skipped") return "bg-destructive";
+  return "bg-muted-foreground";
+}
+
+function TokenCell({ token, onIssue }: { token: TokenRow | null; onIssue: () => void }) {
+  if (!token) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">—</span>
+        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onIssue}>
+          <Ticket className="size-3.5 mr-1" /> Issue
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col leading-tight">
+      <div className="flex items-center gap-1.5">
+        <span className={`inline-block size-1.5 rounded-full ${statusDotClass(token.status)}`} aria-label={token.status} />
+        <span className="tabular font-semibold text-sm">#{token.token_number}</span>
+      </div>
+      <span className="text-[11px] text-muted-foreground">Room {token.room_number || "—"}</span>
+    </div>
+  );
+}
+
+/* ---------------- Issue Token Dialog ---------------- */
+
+interface DoctorRow {
+  id: string;
+  name: string | null;
+  role: string;
+  room_number: string | null;
+}
+
+function IssueTokenDialog({
+  appt, clinicId, patientName, onOpenChange, onIssued,
+}: {
+  appt: Appointment | null;
+  clinicId: string;
+  patientName: string | null;
+  onOpenChange: (o: boolean) => void;
+  onIssued: () => void;
+}) {
+  const open = !!appt;
+  const [doctorId, setDoctorId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const doctorsQ = useQuery({
+    queryKey: ["clinic-doctors", clinicId],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_users")
+        .select("id, name, role, room_number")
+        .eq("clinic_id", clinicId)
+        .in("role", ["doctor", "owner"])
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as DoctorRow[];
+    },
+  });
+
+  // Default selection when dialog opens / doctors load.
+  useEffect(() => {
+    if (!open || !doctorsQ.data?.length) return;
+    if (doctorId && doctorsQ.data.some((d) => d.id === doctorId)) return;
+    const match = appt?.doctor
+      ? doctorsQ.data.find((d) => (d.name ?? "").toLowerCase() === appt.doctor!.toLowerCase())
+      : null;
+    setDoctorId((match ?? doctorsQ.data[0]).id);
+  }, [open, doctorsQ.data, appt, doctorId]);
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) { setDoctorId(""); setSubmitting(false); }
+  }, [open]);
+
+  const selected = doctorsQ.data?.find((d) => d.id === doctorId) ?? null;
+
+  const submit = async () => {
+    if (!appt || !doctorId) return;
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dashboard-api", {
+        body: {
+          action: "issue_token",
+          clinic_id: clinicId,
+          patient_id: appt.patient_id,
+          doctor_user_id: doctorId,
+          service: appt.reason,
+        },
+      });
+      if (error) {
+        const ctx = (error as { context?: { body?: unknown } }).context;
+        let detail = "";
+        try {
+          if (ctx?.body && typeof (ctx.body as ReadableStream).getReader === "function") {
+            // body is a stream; ignore
+          } else if (typeof ctx?.body === "string") {
+            detail = ctx.body;
+          }
+        } catch { /* noop */ }
+        throw new Error(detail || error.message);
+      }
+      const res = data as { ok?: boolean; message?: string; token?: { token_number: number; doctor_name: string | null; room_number: string | null } };
+      if (!res?.ok) throw new Error(res?.message || "Failed to issue token");
+      const tok = res.token!;
+      toast.success(`Token #${tok.token_number} · Dr ${tok.doctor_name ?? "—"} · Room ${tok.room_number || "—"}`);
+      onIssued();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Issue token</DialogTitle>
+          <DialogDescription>
+            Assign a queue token to this patient at reception.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <div className="font-medium">{patientName ?? "Unknown patient"}</div>
+            <div className="tabular text-xs text-muted-foreground">
+              Ref {appt?.appointment_number ?? "—"}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Doctor *</Label>
+            <Select value={doctorId} onValueChange={setDoctorId}>
+              <SelectTrigger className="min-h-10">
+                <SelectValue placeholder={doctorsQ.isLoading ? "Loading…" : "Choose a doctor"} />
+              </SelectTrigger>
+              <SelectContent>
+                {(doctorsQ.data ?? []).map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name ?? "Unnamed"} <span className="text-muted-foreground ml-1">· {d.role}</span>
+                  </SelectItem>
+                ))}
+                {!doctorsQ.isLoading && !(doctorsQ.data ?? []).length && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">No doctors found.</div>
+                )}
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground">
+              Room: <span className="tabular">{selected?.room_number || "not set"}</span>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+          <Button onClick={submit} disabled={submitting || !doctorId}>
+            {submitting && <Loader2 className="size-4 mr-1 animate-spin" />}
+            Issue token
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -91,6 +91,7 @@ export interface Token {
   service: string | null;
   doctor_user_id: string | null;
   doctor_name: string | null;
+  room_number: string | null;
   status: "waiting" | "serving" | "done" | "skipped";
   created_at: string;
   called_at: string | null;
