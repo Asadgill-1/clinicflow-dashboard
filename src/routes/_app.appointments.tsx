@@ -311,7 +311,7 @@ function SortableHead({
 }
 
 function RowActions({
-  appt, pendingKind, onConfirm, onCancel, onReschedule, onMarkAttendance, onOpen,
+  appt, pendingKind, onConfirm, onCancel, onReschedule, onMarkAttendance, onOpen, onIssueToken,
 }: {
   appt: Appointment;
   pendingKind: string | null;
@@ -320,6 +320,7 @@ function RowActions({
   onReschedule: () => void;
   onMarkAttendance: (a: "came" | "no_show") => void;
   onOpen: () => void;
+  onIssueToken: () => void;
 }) {
   const busy = pendingKind !== null;
   const Spin = <Loader2 className="size-4 mr-2 animate-spin" />;
