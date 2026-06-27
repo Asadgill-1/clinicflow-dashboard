@@ -41,7 +41,6 @@ interface ClinicRow {
   hours?: Hours | null;
   ramadan_hours?: Hours | null;
   services?: ServiceRow[] | null;
-  faq?: FaqRow[] | null;
   accepted_insurance?: string[] | null;
   active_offers?: string[] | null;
   default_slot_min?: number | null;
