@@ -81,6 +81,22 @@ export interface Review {
   created_at: string;
 }
 
+export interface Token {
+  id: string;
+  clinic_id: string;
+  issued_date: string;
+  token_number: number;
+  patient_id: string | null;
+  patient_name: string | null;
+  service: string | null;
+  doctor_user_id: string | null;
+  doctor_name: string | null;
+  status: "waiting" | "serving" | "done" | "skipped";
+  created_at: string;
+  called_at: string | null;
+  done_at: string | null;
+}
+
 export interface ConsentLog {
   id: string;
   clinic_id: string;

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as NoAccessRouteImport } from './routes/no-access'
+import { Route as DisplayRouteImport } from './routes/display'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
@@ -17,6 +18,7 @@ import { Route as AppStaffRouteImport } from './routes/_app.staff'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppReviewsRouteImport } from './routes/_app.reviews'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
+import { Route as AppQueueRouteImport } from './routes/_app.queue'
 import { Route as AppPatientsRouteImport } from './routes/_app.patients'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppAppointmentsRouteImport } from './routes/_app.appointments'
@@ -25,6 +27,11 @@ import { Route as AppPatientsIdRouteImport } from './routes/_app.patients.$id'
 const NoAccessRoute = NoAccessRouteImport.update({
   id: '/no-access',
   path: '/no-access',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DisplayRoute = DisplayRouteImport.update({
+  id: '/display',
+  path: '/display',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -61,6 +68,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppQueueRoute = AppQueueRouteImport.update({
+  id: '/queue',
+  path: '/queue',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPatientsRoute = AppPatientsRouteImport.update({
   id: '/patients',
   path: '/patients',
@@ -85,10 +97,12 @@ const AppPatientsIdRoute = AppPatientsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/auth': typeof AuthRoute
+  '/display': typeof DisplayRoute
   '/no-access': typeof NoAccessRoute
   '/appointments': typeof AppAppointmentsRoute
   '/inbox': typeof AppInboxRoute
   '/patients': typeof AppPatientsRouteWithChildren
+  '/queue': typeof AppQueueRoute
   '/reports': typeof AppReportsRoute
   '/reviews': typeof AppReviewsRoute
   '/settings': typeof AppSettingsRoute
@@ -97,10 +111,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/display': typeof DisplayRoute
   '/no-access': typeof NoAccessRoute
   '/appointments': typeof AppAppointmentsRoute
   '/inbox': typeof AppInboxRoute
   '/patients': typeof AppPatientsRouteWithChildren
+  '/queue': typeof AppQueueRoute
   '/reports': typeof AppReportsRoute
   '/reviews': typeof AppReviewsRoute
   '/settings': typeof AppSettingsRoute
@@ -112,10 +128,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/display': typeof DisplayRoute
   '/no-access': typeof NoAccessRoute
   '/_app/appointments': typeof AppAppointmentsRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/patients': typeof AppPatientsRouteWithChildren
+  '/_app/queue': typeof AppQueueRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/reviews': typeof AppReviewsRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -128,10 +146,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/display'
     | '/no-access'
     | '/appointments'
     | '/inbox'
     | '/patients'
+    | '/queue'
     | '/reports'
     | '/reviews'
     | '/settings'
@@ -140,10 +160,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/display'
     | '/no-access'
     | '/appointments'
     | '/inbox'
     | '/patients'
+    | '/queue'
     | '/reports'
     | '/reviews'
     | '/settings'
@@ -154,10 +176,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/auth'
+    | '/display'
     | '/no-access'
     | '/_app/appointments'
     | '/_app/inbox'
     | '/_app/patients'
+    | '/_app/queue'
     | '/_app/reports'
     | '/_app/reviews'
     | '/_app/settings'
@@ -169,6 +193,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DisplayRoute: typeof DisplayRoute
   NoAccessRoute: typeof NoAccessRoute
 }
 
@@ -179,6 +204,13 @@ declare module '@tanstack/react-router' {
       path: '/no-access'
       fullPath: '/no-access'
       preLoaderRoute: typeof NoAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/display': {
+      id: '/display'
+      path: '/display'
+      fullPath: '/display'
+      preLoaderRoute: typeof DisplayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -230,6 +262,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/queue': {
+      id: '/_app/queue'
+      path: '/queue'
+      fullPath: '/queue'
+      preLoaderRoute: typeof AppQueueRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/patients': {
       id: '/_app/patients'
       path: '/patients'
@@ -277,6 +316,7 @@ interface AppRouteChildren {
   AppAppointmentsRoute: typeof AppAppointmentsRoute
   AppInboxRoute: typeof AppInboxRoute
   AppPatientsRoute: typeof AppPatientsRouteWithChildren
+  AppQueueRoute: typeof AppQueueRoute
   AppReportsRoute: typeof AppReportsRoute
   AppReviewsRoute: typeof AppReviewsRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -288,6 +328,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAppointmentsRoute: AppAppointmentsRoute,
   AppInboxRoute: AppInboxRoute,
   AppPatientsRoute: AppPatientsRouteWithChildren,
+  AppQueueRoute: AppQueueRoute,
   AppReportsRoute: AppReportsRoute,
   AppReviewsRoute: AppReviewsRoute,
   AppSettingsRoute: AppSettingsRoute,
@@ -300,6 +341,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  DisplayRoute: DisplayRoute,
   NoAccessRoute: NoAccessRoute,
 }
 export const routeTree = rootRouteImport

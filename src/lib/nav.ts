@@ -8,6 +8,7 @@ import {
   Settings,
   BarChart3,
   UserCog,
+  Ticket,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -22,6 +23,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutDashboard, roles: ["owner", "doctor", "receptionist"], exact: true },
   { to: "/appointments", label: "Appointments", icon: CalendarDays, roles: ["owner", "doctor", "receptionist"] },
+  { to: "/queue", label: "Queue", icon: Ticket, roles: ["owner", "doctor", "receptionist"] },
   { to: "/inbox", label: "Inbox", icon: MessagesSquare, roles: ["owner", "doctor", "receptionist"] },
   { to: "/patients", label: "Patients", icon: Users, roles: ["owner", "doctor", "receptionist"] },
   { to: "/reviews", label: "Reviews", icon: Star, roles: ["owner", "doctor", "receptionist"] },
