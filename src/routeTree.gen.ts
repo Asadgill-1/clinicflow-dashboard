@@ -18,6 +18,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppReviewsRouteImport } from './routes/_app.reviews'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppPatientsRouteImport } from './routes/_app.patients'
+import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppAppointmentsRouteImport } from './routes/_app.appointments'
 import { Route as AppPatientsIdRouteImport } from './routes/_app.patients.$id'
 
@@ -65,6 +66,11 @@ const AppPatientsRoute = AppPatientsRouteImport.update({
   path: '/patients',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInboxRoute = AppInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAppointmentsRoute = AppAppointmentsRouteImport.update({
   id: '/appointments',
   path: '/appointments',
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/no-access': typeof NoAccessRoute
   '/appointments': typeof AppAppointmentsRoute
+  '/inbox': typeof AppInboxRoute
   '/patients': typeof AppPatientsRouteWithChildren
   '/reports': typeof AppReportsRoute
   '/reviews': typeof AppReviewsRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/no-access': typeof NoAccessRoute
   '/appointments': typeof AppAppointmentsRoute
+  '/inbox': typeof AppInboxRoute
   '/patients': typeof AppPatientsRouteWithChildren
   '/reports': typeof AppReportsRoute
   '/reviews': typeof AppReviewsRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/no-access': typeof NoAccessRoute
   '/_app/appointments': typeof AppAppointmentsRoute
+  '/_app/inbox': typeof AppInboxRoute
   '/_app/patients': typeof AppPatientsRouteWithChildren
   '/_app/reports': typeof AppReportsRoute
   '/_app/reviews': typeof AppReviewsRoute
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/no-access'
     | '/appointments'
+    | '/inbox'
     | '/patients'
     | '/reports'
     | '/reviews'
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/no-access'
     | '/appointments'
+    | '/inbox'
     | '/patients'
     | '/reports'
     | '/reviews'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/no-access'
     | '/_app/appointments'
+    | '/_app/inbox'
     | '/_app/patients'
     | '/_app/reports'
     | '/_app/reviews'
@@ -225,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPatientsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inbox': {
+      id: '/_app/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/appointments': {
       id: '/_app/appointments'
       path: '/appointments'
@@ -256,6 +275,7 @@ const AppPatientsRouteWithChildren = AppPatientsRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppAppointmentsRoute: typeof AppAppointmentsRoute
+  AppInboxRoute: typeof AppInboxRoute
   AppPatientsRoute: typeof AppPatientsRouteWithChildren
   AppReportsRoute: typeof AppReportsRoute
   AppReviewsRoute: typeof AppReviewsRoute
@@ -266,6 +286,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAppointmentsRoute: AppAppointmentsRoute,
+  AppInboxRoute: AppInboxRoute,
   AppPatientsRoute: AppPatientsRouteWithChildren,
   AppReportsRoute: AppReportsRoute,
   AppReviewsRoute: AppReviewsRoute,
