@@ -29,7 +29,7 @@ import {
   CalendarClock, Ban, Check, Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect } from "react";
+
 
 export const Route = createFileRoute("/_app/appointments")({
   component: AppointmentsPage,
