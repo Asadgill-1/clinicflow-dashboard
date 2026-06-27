@@ -301,7 +301,7 @@ function Kpi({
 }
 
 const tooltipStyle: React.CSSProperties = {
-  background: "hsl(var(--card))",
+  background: "var(--card)",
   border: `1px solid ${COLORS.border}`,
   borderRadius: 8,
   fontSize: 12,
