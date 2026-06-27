@@ -116,10 +116,6 @@ function SettingsPage() {
       price: Number(s.price) || 0,
       duration_min: Number(s.duration_min) || 0,
     })).filter((s) => s.name);
-    const faq = (form.faq ?? []).map((r) => ({
-      question: String(r.question ?? "").trim(),
-      answer: String(r.answer ?? "").trim(),
-    })).filter((r) => r.question);
     const accepted_insurance = (form.accepted_insurance ?? []).map((x) => x.trim()).filter(Boolean);
     const active_offers = (form.active_offers ?? []).map((x) => x.trim()).filter(Boolean);
 
