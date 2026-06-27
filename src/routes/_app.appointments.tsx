@@ -333,6 +333,9 @@ function RowActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem onSelect={onOpen}>Open patient</DropdownMenuItem>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onIssueToken(); }}>
+          <Ticket className="size-4 mr-2 text-primary" /> Issue token
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={busy || appt.status === "confirmed" || appt.status === "cancelled"}
