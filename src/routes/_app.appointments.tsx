@@ -282,6 +282,17 @@ function AppointmentsPage() {
         onOpenChange={(o) => { if (!o) setRescheduleAppt(null); }}
         onDone={() => { setRescheduleAppt(null); refetch(); }}
       />
+
+      <IssueTokenDialog
+        appt={issueAppt}
+        clinicId={clinicId}
+        patientName={issueAppt ? (apptsQ.data?.patientsById[issueAppt.patient_id]?.name ?? null) : null}
+        onOpenChange={(o) => { if (!o) setIssueAppt(null); }}
+        onIssued={() => {
+          setIssueAppt(null);
+          qc.invalidateQueries({ queryKey: ["tokens-today", clinicId] });
+        }}
+      />
     </div>
   );
 }
