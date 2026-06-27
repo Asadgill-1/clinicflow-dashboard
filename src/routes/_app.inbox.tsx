@@ -131,9 +131,11 @@ function InboxPage() {
     },
   });
 
-  const refetchAll = () => {
-    qc.invalidateQueries({ queryKey: ["inbox-threads", clinicId] });
-    if (selected) qc.invalidateQueries({ queryKey: ["inbox-thread", clinicId, selected] });
+  const refetchAll = async () => {
+    await qc.invalidateQueries({ queryKey: ["inbox-threads", clinicId] });
+    if (selected) {
+      await qc.refetchQueries({ queryKey: ["inbox-thread", clinicId, selected], exact: true });
+    }
   };
 
   const takeover = useMutation({
