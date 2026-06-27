@@ -131,38 +131,50 @@ function InboxPage() {
     },
   });
 
-  const refetchAll = () => {
-    qc.invalidateQueries({ queryKey: ["inbox-threads", clinicId] });
-    if (selected) qc.invalidateQueries({ queryKey: ["inbox-thread", clinicId, selected] });
+  const refetchAll = async () => {
+    await qc.invalidateQueries({ queryKey: ["inbox-threads", clinicId] });
+    if (selected) {
+      await qc.refetchQueries({ queryKey: ["inbox-thread", clinicId, selected], exact: true });
+    }
   };
 
   const takeover = useMutation({
     mutationFn: async (patient_id: string) => {
       const res = await callAction("takeover", { patient_id });
-      if (!res.ok) throw new Error(res.message || "Could not take over");
+      if (!res.ok) throw new Error(res.message || `Takeover failed: ${JSON.stringify(res)}`);
       return res;
     },
-    onSuccess: () => { toast.success("You are now handling this thread."); refetchAll(); },
+    onSuccess: async () => {
+      toast.success("You are now handling this thread.");
+      await refetchAll();
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 
   const handback = useMutation({
     mutationFn: async (patient_id: string) => {
       const res = await callAction("handback", { patient_id });
-      if (!res.ok) throw new Error(res.message || "Could not hand back");
+      if (!res.ok) throw new Error(res.message || `Handback failed: ${JSON.stringify(res)}`);
       return res;
     },
-    onSuccess: () => { toast.success("Handed back to the assistant."); refetchAll(); },
+    onSuccess: async () => {
+      toast.success("Handed back to the assistant.");
+      await refetchAll();
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 
   const sendReply = useMutation({
     mutationFn: async ({ patient_id, text }: { patient_id: string; text: string }) => {
       const res = await callAction("staff_reply", { patient_id, text });
-      if (!res.ok) throw new Error(res.message || "Failed to send");
+      if (!res.ok) throw new Error(res.message || `Send failed: ${JSON.stringify(res)}`);
       return res;
     },
-    onSuccess: () => { toast.success("Sent"); setReply(""); refetchAll(); },
+    onSuccess: async () => {
+      toast.success("Sent");
+      setReply("");
+      await refetchAll();
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 

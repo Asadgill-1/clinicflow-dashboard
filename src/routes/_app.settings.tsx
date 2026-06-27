@@ -18,7 +18,6 @@ export const Route = createFileRoute("/_app/settings")({
 });
 
 interface ServiceRow { name: string; price: number | string; duration_min: number | string }
-interface FaqRow { question: string; answer: string }
 
 interface Hours {
   mon_thu?: string;
@@ -42,7 +41,6 @@ interface ClinicRow {
   hours?: Hours | null;
   ramadan_hours?: Hours | null;
   services?: ServiceRow[] | null;
-  faq?: FaqRow[] | null;
   accepted_insurance?: string[] | null;
   active_offers?: string[] | null;
   default_slot_min?: number | null;
@@ -118,10 +116,6 @@ function SettingsPage() {
       price: Number(s.price) || 0,
       duration_min: Number(s.duration_min) || 0,
     })).filter((s) => s.name);
-    const faq = (form.faq ?? []).map((r) => ({
-      question: String(r.question ?? "").trim(),
-      answer: String(r.answer ?? "").trim(),
-    })).filter((r) => r.question);
     const accepted_insurance = (form.accepted_insurance ?? []).map((x) => x.trim()).filter(Boolean);
     const active_offers = (form.active_offers ?? []).map((x) => x.trim()).filter(Boolean);
 
@@ -137,7 +131,6 @@ function SettingsPage() {
       hours: cleanHours(form.hours),
       ramadan_hours: cleanHours(form.ramadan_hours),
       services,
-      faq,
       accepted_insurance,
       active_offers,
       default_slot_min: numOrNull(form.default_slot_min),
@@ -261,42 +254,6 @@ function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* FAQ */}
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-base">FAQ</CardTitle>
-          <Button type="button" variant="outline" size="sm" onClick={() =>
-            setForm((f) => f && ({ ...f, faq: [...(f.faq ?? []), { question: "", answer: "" }] }))
-          }><Plus className="size-3.5 mr-1" />Add Q&A</Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(form.faq ?? []).length === 0 && (
-            <p className="text-sm text-muted-foreground">No FAQs yet.</p>
-          )}
-          {(form.faq ?? []).map((r, i) => (
-            <div key={i} className="grid grid-cols-[1fr_40px] gap-2 items-start">
-              <div className="space-y-2">
-                <Input
-                  value={r.question}
-                  onChange={(e) => setForm((f) => f && updateArrayItem(f, "faq", i, { ...r, question: e.target.value }))}
-                  placeholder="Question"
-                />
-                <Textarea
-                  value={r.answer}
-                  onChange={(e) => setForm((f) => f && updateArrayItem(f, "faq", i, { ...r, answer: e.target.value }))}
-                  placeholder="Answer"
-                  rows={2}
-                />
-              </div>
-              <Button type="button" variant="ghost" size="icon" aria-label="Remove" onClick={() =>
-                setForm((f) => f && removeArrayItem(f, "faq", i))}>
-                <Trash2 className="size-4 text-destructive" />
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
       {/* Insurance + Offers */}
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Insurance & Offers</CardTitle></CardHeader>
@@ -416,7 +373,6 @@ function normalize(row: ClinicRow): ClinicRow {
     hours: (row.hours ?? {}) as Hours,
     ramadan_hours: (row.ramadan_hours ?? {}) as Hours,
     services: Array.isArray(row.services) ? row.services : [],
-    faq: Array.isArray(row.faq) ? row.faq : [],
     accepted_insurance: Array.isArray(row.accepted_insurance) ? row.accepted_insurance : [],
     active_offers: Array.isArray(row.active_offers) ? row.active_offers : [],
   };
