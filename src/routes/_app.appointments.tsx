@@ -256,6 +256,7 @@ function AppointmentsPage() {
                               );
                             }}
                             onOpen={() => navigate({ to: "/patients/$id", params: { id: a.patient_id } })}
+                            onIssueToken={() => setIssueAppt(a)}
                           />
                         </TableCell>
                       </TableRow>
