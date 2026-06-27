@@ -51,7 +51,46 @@ function AppointmentsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [newOpen, setNewOpen] = useState(false);
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
+  const [issueAppt, setIssueAppt] = useState<Appointment | null>(null);
   const [pending, setPending] = useState<{ id: string; kind: string } | null>(null);
+
+  const todayStr = useMemo(
+    () => new Date().toLocaleDateString("en-CA", { timeZone: tz }),
+    [tz],
+  );
+
+  const tokensQ = useQuery({
+    queryKey: ["tokens-today", clinicId, todayStr],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tokens")
+        .select("patient_id, token_number, room_number, doctor_name, status, issued_date, created_at")
+        .eq("clinic_id", clinicId)
+        .eq("issued_date", todayStr);
+      if (error) throw error;
+      const map: Record<string, { token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }> = {};
+      for (const t of (data ?? []) as Array<{ patient_id: string | null; token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }>) {
+        if (!t.patient_id) continue;
+        const prev = map[t.patient_id];
+        if (!prev || new Date(t.created_at) > new Date(prev.created_at)) {
+          map[t.patient_id] = t;
+        }
+      }
+      return map;
+    },
+  });
+
+  useEffect(() => {
+    const ch = supabase
+      .channel(`tokens-appts-${clinicId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tokens", filter: `clinic_id=eq.${clinicId}` },
+        () => qc.invalidateQueries({ queryKey: ["tokens-today", clinicId] }),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [clinicId, qc]);
 
   const apptsQ = useQuery({
     queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir],
