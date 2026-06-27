@@ -139,3 +139,18 @@
 }
 
 @utility tabular { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+
+/* Print: only show .print-slip, hide everything else */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-slip, .print-slip * { visibility: visible !important; }
+  .print-slip {
+    position: absolute !important;
+    inset: 0 !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: white !important;
+    color: black !important;
+  }
+  .print-hide { display: none !important; }
+}
