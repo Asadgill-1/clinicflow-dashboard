@@ -373,7 +373,6 @@ function normalize(row: ClinicRow): ClinicRow {
     hours: (row.hours ?? {}) as Hours,
     ramadan_hours: (row.ramadan_hours ?? {}) as Hours,
     services: Array.isArray(row.services) ? row.services : [],
-    faq: Array.isArray(row.faq) ? row.faq : [],
     accepted_insurance: Array.isArray(row.accepted_insurance) ? row.accepted_insurance : [],
     active_offers: Array.isArray(row.active_offers) ? row.active_offers : [],
   };
