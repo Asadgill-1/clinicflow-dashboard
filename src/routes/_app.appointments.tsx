@@ -230,6 +230,12 @@ function AppointmentsPage() {
                             : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell>
+                          <TokenCell
+                            token={tokensQ.data?.[a.patient_id] ?? null}
+                            onIssue={() => setIssueAppt(a)}
+                          />
+                        </TableCell>
+                        <TableCell>
                           <RowActions
                             appt={a}
                             pendingKind={isPending ? pending!.kind : null}
