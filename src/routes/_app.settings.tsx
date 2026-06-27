@@ -131,7 +131,6 @@ function SettingsPage() {
       hours: cleanHours(form.hours),
       ramadan_hours: cleanHours(form.ramadan_hours),
       services,
-      faq,
       accepted_insurance,
       active_offers,
       default_slot_min: numOrNull(form.default_slot_min),
@@ -252,42 +251,6 @@ function SettingsPage() {
               <span>Name</span><span>Price (AED)</span><span>Duration (m)</span><span />
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* FAQ */}
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-base">FAQ</CardTitle>
-          <Button type="button" variant="outline" size="sm" onClick={() =>
-            setForm((f) => f && ({ ...f, faq: [...(f.faq ?? []), { question: "", answer: "" }] }))
-          }><Plus className="size-3.5 mr-1" />Add Q&A</Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(form.faq ?? []).length === 0 && (
-            <p className="text-sm text-muted-foreground">No FAQs yet.</p>
-          )}
-          {(form.faq ?? []).map((r, i) => (
-            <div key={i} className="grid grid-cols-[1fr_40px] gap-2 items-start">
-              <div className="space-y-2">
-                <Input
-                  value={r.question}
-                  onChange={(e) => setForm((f) => f && updateArrayItem(f, "faq", i, { ...r, question: e.target.value }))}
-                  placeholder="Question"
-                />
-                <Textarea
-                  value={r.answer}
-                  onChange={(e) => setForm((f) => f && updateArrayItem(f, "faq", i, { ...r, answer: e.target.value }))}
-                  placeholder="Answer"
-                  rows={2}
-                />
-              </div>
-              <Button type="button" variant="ghost" size="icon" aria-label="Remove" onClick={() =>
-                setForm((f) => f && removeArrayItem(f, "faq", i))}>
-                <Trash2 className="size-4 text-destructive" />
-              </Button>
-            </div>
-          ))}
         </CardContent>
       </Card>
 
