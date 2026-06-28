@@ -1,9 +1,9 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import type { Token, ClinicUser } from "@/lib/types";
+import type { Token } from "@/lib/types";
 
 export const Route = createFileRoute("/display")({
   component: DisplayPage,
@@ -11,12 +11,8 @@ export const Route = createFileRoute("/display")({
 
 const DUBAI_TZ = "Asia/Dubai";
 
-function todayInDubai(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: DUBAI_TZ,
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date());
-  return `${parts.find(p => p.type === "year")!.value}-${parts.find(p => p.type === "month")!.value}-${parts.find(p => p.type === "day")!.value}`;
+function todayInTz(tz: string): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: tz });
 }
 
 function DisplayPage() {
@@ -24,45 +20,57 @@ function DisplayPage() {
   const qc = useQueryClient();
 
   if (status === "loading")
-    return <div className="min-h-screen grid place-items-center text-2xl text-muted-foreground">Loading…</div>;
-  if (status === "signed_out") return <Navigate to="/auth" />;
+    return (
+      <div className="dark min-h-screen bg-background text-foreground grid place-items-center text-3xl text-muted-foreground">
+        Loading…
+      </div>
+    );
+  if (status === "signed_out")
+    return (
+      <div className="dark min-h-screen bg-background text-foreground grid place-items-center p-10 text-center">
+        <div>
+          <div className="text-4xl font-semibold mb-3">Sign in on this screen first</div>
+          <div className="text-xl text-muted-foreground">
+            Open the dashboard, sign in, then return to /display on this TV.
+          </div>
+        </div>
+      </div>
+    );
   if (status === "no_access") return <Navigate to="/no-access" />;
   if (!clinicUser) return null;
 
-  return <DisplayInner clinicId={clinicUser.clinic_id} clinicName={clinic?.name ?? "Clinic"} qcRef={qc} />;
+  return (
+    <DisplayInner
+      clinicId={clinicUser.clinic_id}
+      clinicName={clinic?.name ?? "Clinic"}
+      tz={clinic?.timezone || DUBAI_TZ}
+      qcRef={qc}
+    />
+  );
 }
 
 function DisplayInner({
-  clinicId, clinicName, qcRef,
-}: { clinicId: string; clinicName: string; qcRef: ReturnType<typeof useQueryClient> }) {
-  const today = todayInDubai();
+  clinicId, clinicName, tz, qcRef,
+}: {
+  clinicId: string;
+  clinicName: string;
+  tz: string;
+  qcRef: ReturnType<typeof useQueryClient>;
+}) {
+  const today = todayInTz(tz);
 
   const tokensQ = useQuery({
     queryKey: ["display-tokens", clinicId, today],
-    refetchInterval: 5000,
+    refetchInterval: 15000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tokens")
-        .select("*")
+        .select("token_number, room_number, doctor_name, status, created_at, called_at")
         .eq("clinic_id", clinicId)
         .eq("issued_date", today)
         .order("token_number", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Token[];
-    },
-  });
-
-  const doctorsQ = useQuery({
-    queryKey: ["display-doctors", clinicId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clinic_users")
-        .select("id, clinic_id, auth_user_id, role, name, email")
-        .eq("clinic_id", clinicId)
-        .in("role", ["doctor", "owner"])
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as ClinicUser[];
+      return (data ?? []) as Array<Pick<Token, "token_number" | "room_number" | "doctor_name" | "status" | "created_at" | "called_at">>;
     },
   });
 
@@ -78,62 +86,141 @@ function DisplayInner({
     return () => { supabase.removeChannel(channel); };
   }, [clinicId, qcRef]);
 
-  const tokens = tokensQ.data ?? [];
-  const doctors = doctorsQ.data ?? [];
+  // Live clock
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const clock = now.toLocaleTimeString("en-GB", {
+    timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
+  });
 
-  const rows = useMemo(() => {
-    const map = new Map<string, { name: string; serving: Token | null; waiting: number }>();
-    for (const d of doctors) {
-      map.set(d.id, { name: d.name ?? d.email ?? "Doctor", serving: null, waiting: 0 });
-    }
-    for (const t of tokens) {
-      const key = t.doctor_user_id ?? "_unassigned";
-      if (!map.has(key)) map.set(key, { name: t.doctor_name ?? "Doctor", serving: null, waiting: 0 });
-      const e = map.get(key)!;
-      if (t.status === "serving") e.serving = t;
-      if (t.status === "waiting") e.waiting += 1;
-    }
-    return Array.from(map.values());
-  }, [tokens, doctors]);
+  const tokens = tokensQ.data ?? [];
+  const serving = useMemo(
+    () => tokens.filter((t) => t.status === "serving").sort((a, b) => a.token_number - b.token_number),
+    [tokens],
+  );
+  const waiting = useMemo(
+    () => tokens.filter((t) => t.status === "waiting").sort((a, b) => a.token_number - b.token_number),
+    [tokens],
+  );
+
+  const waitingShown = waiting.slice(0, 12);
+  const waitingMore = Math.max(0, waiting.length - waitingShown.length);
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-8 md:p-12">
-      <div className="flex items-baseline justify-between flex-wrap gap-4 mb-10">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight">{clinicName}</h1>
-        <div className="text-xl md:text-2xl tabular text-muted-foreground">{today} · Asia/Dubai</div>
-      </div>
+    <div className="dark min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
+      <style>{`
+        @keyframes pulseRing {
+          0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.55); }
+          50%      { box-shadow: 0 0 0 18px hsl(var(--primary) / 0); }
+        }
+        .serve-pulse { animation: pulseRing 2.2s ease-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .serve-pulse { animation: none; } }
+      `}</style>
 
-      {rows.length === 0 ? (
-        <div className="text-3xl text-muted-foreground text-center py-20">No tokens issued today.</div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2">
-          {rows.map((r, i) => (
-            <div
-              key={i}
-              className="rounded-xl border-2 border-border bg-card p-8 md:p-10"
-              aria-label={`Doctor ${r.name}`}
-            >
-              <div className="text-2xl md:text-3xl font-semibold truncate">{r.name}</div>
-              <div className="mt-2 text-base md:text-lg uppercase tracking-widest text-muted-foreground">Now serving</div>
-              {r.serving ? (
-                <div className="mt-4 flex items-baseline gap-6 flex-wrap">
-                  <span className="tabular text-[8rem] md:text-[10rem] leading-none font-black text-primary">
-                    T{r.serving.token_number}
-                  </span>
-                  <span className="text-3xl md:text-4xl font-medium truncate">
-                    {r.serving.patient_name ?? "—"}
-                  </span>
-                </div>
-              ) : (
-                <div className="mt-4 text-5xl text-muted-foreground">—</div>
-              )}
-              <div className="mt-6 text-xl md:text-2xl text-muted-foreground tabular">
-                {r.waiting} waiting
-              </div>
-            </div>
-          ))}
+      {/* Top bar */}
+      <header className="flex items-end justify-between gap-6 px-10 pt-8 pb-6 border-b border-border">
+        <div>
+          <div className="text-xs md:text-sm uppercase tracking-[0.3em] text-muted-foreground">
+            Waiting room
+          </div>
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mt-1">{clinicName}</h1>
         </div>
-      )}
+        <div
+          className="tabular text-5xl md:text-7xl font-semibold text-foreground leading-none"
+          aria-label="Current time"
+        >
+          {clock}
+        </div>
+      </header>
+
+      {/* Now serving */}
+      <section className="flex-1 px-10 py-8 min-h-0">
+        <div className="text-sm md:text-base uppercase tracking-[0.3em] text-muted-foreground mb-4">
+          Now serving
+        </div>
+
+        {serving.length === 0 ? (
+          <div className="grid place-items-center h-full">
+            <div className="text-4xl md:text-6xl font-medium text-muted-foreground text-center">
+              Please wait to be called
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`grid gap-6 ${
+              serving.length === 1
+                ? "grid-cols-1"
+                : serving.length === 2
+                ? "grid-cols-1 lg:grid-cols-2"
+                : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+            }`}
+          >
+            {serving.map((t, i) => (
+              <article
+                key={`${t.token_number}-${i}`}
+                className="serve-pulse rounded-2xl border-2 border-primary/40 bg-primary/10 px-8 py-7"
+                aria-label={`Now serving token ${t.token_number}, room ${t.room_number ?? "unassigned"}`}
+              >
+                <div className="flex items-center gap-6 flex-wrap">
+                  <span className="tabular text-[7rem] md:text-[10rem] leading-none font-black text-primary">
+                    #{t.token_number}
+                  </span>
+                  <span className="text-5xl md:text-7xl text-muted-foreground leading-none" aria-hidden>
+                    →
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-xs md:text-sm uppercase tracking-[0.25em] text-muted-foreground">
+                      Room
+                    </span>
+                    <span className="tabular text-6xl md:text-8xl font-bold leading-none">
+                      {t.room_number || "—"}
+                    </span>
+                  </div>
+                </div>
+                {t.doctor_name && (
+                  <div className="mt-5 text-lg md:text-2xl text-muted-foreground truncate">
+                    {t.doctor_name}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Waiting next */}
+      <footer className="px-10 pb-8 pt-4 border-t border-border">
+        <div className="text-sm md:text-base uppercase tracking-[0.3em] text-muted-foreground mb-3">
+          Waiting next
+        </div>
+        {waiting.length === 0 ? (
+          <div className="text-2xl md:text-3xl text-muted-foreground">No one waiting.</div>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {waitingShown.map((t, i) => (
+              <span
+                key={`${t.token_number}-${i}`}
+                className="tabular inline-flex items-baseline gap-2 rounded-xl border border-border bg-card px-5 py-3 text-2xl md:text-3xl font-semibold"
+              >
+                <span className="text-primary">#{t.token_number}</span>
+                {t.room_number && (
+                  <span className="text-muted-foreground text-xl md:text-2xl font-medium">
+                    · Room {t.room_number}
+                  </span>
+                )}
+              </span>
+            ))}
+            {waitingMore > 0 && (
+              <span className="tabular inline-flex items-center rounded-xl border border-dashed border-border px-5 py-3 text-2xl md:text-3xl font-medium text-muted-foreground">
+                +{waitingMore} more
+              </span>
+            )}
+          </div>
+        )}
+      </footer>
     </div>
   );
 }
