@@ -819,7 +819,7 @@ function IssueTokenDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Doctor *</Label>
-            <Select value={doctorId} onValueChange={setDoctorId}>
+            <Select value={doctorId} onValueChange={onDoctorChange}>
               <SelectTrigger className="min-h-10">
                 <SelectValue placeholder={doctorsQ.isLoading ? "Loading…" : "Choose a doctor"} />
               </SelectTrigger>
@@ -835,7 +835,20 @@ function IssueTokenDialog({
               </SelectContent>
             </Select>
             <div className="text-xs text-muted-foreground">
-              Room: <span className="tabular">{selected?.room_number || "not set"}</span>
+              Doctor's default room: <span className="tabular">{selected?.room_number || "not set"}</span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="token-room">Room</Label>
+            <Input
+              id="token-room"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              placeholder="e.g. 2"
+              className="min-h-10"
+            />
+            <div className="text-xs text-muted-foreground">
+              Override the room for this token, or leave to use the doctor's default.
             </div>
           </div>
         </div>
