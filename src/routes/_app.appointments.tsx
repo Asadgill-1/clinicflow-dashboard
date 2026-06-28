@@ -231,7 +231,7 @@ function AppointmentsPage() {
                         </TableCell>
                         <TableCell>
                           <TokenCell
-                            token={tokensQ.data?.[a.patient_id] ?? null}
+                            token={tokensQ.data?.[a.id] ?? null}
                             onIssue={() => setIssueAppt(a)}
                           />
                         </TableCell>
