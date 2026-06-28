@@ -717,6 +717,7 @@ function IssueTokenDialog({
 }) {
   const open = !!appt;
   const [doctorId, setDoctorId] = useState<string>("");
+  const [room, setRoom] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
   const doctorsQ = useQuery({
@@ -741,27 +742,39 @@ function IssueTokenDialog({
     const match = appt?.doctor
       ? doctorsQ.data.find((d) => (d.name ?? "").toLowerCase() === appt.doctor!.toLowerCase())
       : null;
-    setDoctorId((match ?? doctorsQ.data[0]).id);
+    const pick = match ?? doctorsQ.data[0];
+    setDoctorId(pick.id);
+    setRoom(pick.room_number ?? "");
   }, [open, doctorsQ.data, appt, doctorId]);
 
   // Reset on close
   useEffect(() => {
-    if (!open) { setDoctorId(""); setSubmitting(false); }
+    if (!open) { setDoctorId(""); setRoom(""); setSubmitting(false); }
   }, [open]);
 
   const selected = doctorsQ.data?.find((d) => d.id === doctorId) ?? null;
+
+  // When doctor changes, sync room to that doctor's default
+  const onDoctorChange = (id: string) => {
+    setDoctorId(id);
+    const d = doctorsQ.data?.find((x) => x.id === id);
+    setRoom(d?.room_number ?? "");
+  };
 
   const submit = async () => {
     if (!appt || !doctorId) return;
     setSubmitting(true);
     try {
+      const trimmedRoom = room.trim();
       const { data, error } = await supabase.functions.invoke("dashboard-api", {
         body: {
           action: "issue_token",
           clinic_id: clinicId,
+          appointment_id: appt.id,
           patient_id: appt.patient_id,
           doctor_user_id: doctorId,
           service: appt.reason,
+          ...(trimmedRoom ? { room_number: trimmedRoom } : {}),
         },
       });
       if (error) {
