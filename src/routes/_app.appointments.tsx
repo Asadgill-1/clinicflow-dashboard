@@ -64,16 +64,16 @@ function AppointmentsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tokens")
-        .select("patient_id, token_number, room_number, doctor_name, status, issued_date, created_at")
+        .select("appointment_id, patient_id, token_number, room_number, doctor_name, status, issued_date, created_at")
         .eq("clinic_id", clinicId)
         .eq("issued_date", todayStr);
       if (error) throw error;
       const map: Record<string, { token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }> = {};
-      for (const t of (data ?? []) as Array<{ patient_id: string | null; token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }>) {
-        if (!t.patient_id) continue;
-        const prev = map[t.patient_id];
+      for (const t of (data ?? []) as Array<{ appointment_id: string | null; token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }>) {
+        if (!t.appointment_id) continue;
+        const prev = map[t.appointment_id];
         if (!prev || new Date(t.created_at) > new Date(prev.created_at)) {
-          map[t.patient_id] = t;
+          map[t.appointment_id] = t;
         }
       }
       return map;
