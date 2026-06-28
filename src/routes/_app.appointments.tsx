@@ -64,16 +64,16 @@ function AppointmentsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tokens")
-        .select("patient_id, token_number, room_number, doctor_name, status, issued_date, created_at")
+        .select("appointment_id, patient_id, token_number, room_number, doctor_name, status, issued_date, created_at")
         .eq("clinic_id", clinicId)
         .eq("issued_date", todayStr);
       if (error) throw error;
       const map: Record<string, { token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }> = {};
-      for (const t of (data ?? []) as Array<{ patient_id: string | null; token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }>) {
-        if (!t.patient_id) continue;
-        const prev = map[t.patient_id];
+      for (const t of (data ?? []) as Array<{ appointment_id: string | null; token_number: number; room_number: string | null; doctor_name: string | null; status: string; created_at: string }>) {
+        if (!t.appointment_id) continue;
+        const prev = map[t.appointment_id];
         if (!prev || new Date(t.created_at) > new Date(prev.created_at)) {
-          map[t.patient_id] = t;
+          map[t.appointment_id] = t;
         }
       }
       return map;
@@ -231,7 +231,7 @@ function AppointmentsPage() {
                         </TableCell>
                         <TableCell>
                           <TokenCell
-                            token={tokensQ.data?.[a.patient_id] ?? null}
+                            token={tokensQ.data?.[a.id] ?? null}
                             onIssue={() => setIssueAppt(a)}
                           />
                         </TableCell>
@@ -717,6 +717,7 @@ function IssueTokenDialog({
 }) {
   const open = !!appt;
   const [doctorId, setDoctorId] = useState<string>("");
+  const [room, setRoom] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
   const doctorsQ = useQuery({
@@ -741,27 +742,39 @@ function IssueTokenDialog({
     const match = appt?.doctor
       ? doctorsQ.data.find((d) => (d.name ?? "").toLowerCase() === appt.doctor!.toLowerCase())
       : null;
-    setDoctorId((match ?? doctorsQ.data[0]).id);
+    const pick = match ?? doctorsQ.data[0];
+    setDoctorId(pick.id);
+    setRoom(pick.room_number ?? "");
   }, [open, doctorsQ.data, appt, doctorId]);
 
   // Reset on close
   useEffect(() => {
-    if (!open) { setDoctorId(""); setSubmitting(false); }
+    if (!open) { setDoctorId(""); setRoom(""); setSubmitting(false); }
   }, [open]);
 
   const selected = doctorsQ.data?.find((d) => d.id === doctorId) ?? null;
+
+  // When doctor changes, sync room to that doctor's default
+  const onDoctorChange = (id: string) => {
+    setDoctorId(id);
+    const d = doctorsQ.data?.find((x) => x.id === id);
+    setRoom(d?.room_number ?? "");
+  };
 
   const submit = async () => {
     if (!appt || !doctorId) return;
     setSubmitting(true);
     try {
+      const trimmedRoom = room.trim();
       const { data, error } = await supabase.functions.invoke("dashboard-api", {
         body: {
           action: "issue_token",
           clinic_id: clinicId,
+          appointment_id: appt.id,
           patient_id: appt.patient_id,
           doctor_user_id: doctorId,
           service: appt.reason,
+          ...(trimmedRoom ? { room_number: trimmedRoom } : {}),
         },
       });
       if (error) {
@@ -806,7 +819,7 @@ function IssueTokenDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Doctor *</Label>
-            <Select value={doctorId} onValueChange={setDoctorId}>
+            <Select value={doctorId} onValueChange={onDoctorChange}>
               <SelectTrigger className="min-h-10">
                 <SelectValue placeholder={doctorsQ.isLoading ? "Loading…" : "Choose a doctor"} />
               </SelectTrigger>
@@ -822,7 +835,20 @@ function IssueTokenDialog({
               </SelectContent>
             </Select>
             <div className="text-xs text-muted-foreground">
-              Room: <span className="tabular">{selected?.room_number || "not set"}</span>
+              Doctor's default room: <span className="tabular">{selected?.room_number || "not set"}</span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="token-room">Room</Label>
+            <Input
+              id="token-room"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              placeholder="e.g. 2"
+              className="min-h-10"
+            />
+            <div className="text-xs text-muted-foreground">
+              Override the room for this token, or leave to use the doctor's default.
             </div>
           </div>
         </div>
