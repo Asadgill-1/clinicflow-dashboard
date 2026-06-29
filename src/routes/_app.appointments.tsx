@@ -602,7 +602,7 @@ function NewAppointmentDialog({
   });
 
   const reset = () => {
-    setName(""); setPhone(""); setService(""); setDate(""); setTime("");
+    setName(""); setPhone(""); setService(""); setDoctorId("__none__"); setDate(""); setTime("");
     setConflict(null); setSubmitting(false);
   };
 
