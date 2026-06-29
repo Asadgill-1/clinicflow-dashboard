@@ -179,7 +179,12 @@ function AppointmentsPage() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>
-          <p className="text-sm text-muted-foreground">Manage booking status and attendance.</p>
+          <p className="text-sm text-muted-foreground">
+            Manage booking status and attendance.{" "}
+            <span className="ml-1 italic">
+              Showing: {isDoctorOnly ? "my patients" : "all"}
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Status</span>
