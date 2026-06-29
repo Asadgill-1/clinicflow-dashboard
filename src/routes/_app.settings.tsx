@@ -409,3 +409,91 @@ function removeArrayItem<K extends keyof ClinicRow>(f: ClinicRow, key: K, i: num
   next.splice(i, 1);
   return { ...f, [key]: next as unknown as ClinicRow[K] };
 }
+
+interface DoctorRoomRow { id: string; name: string | null; role: string; room_number: string | null }
+
+function DoctorsRoomsCard({ clinicId }: { clinicId: string }) {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["clinic-doctors-rooms", clinicId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_users")
+        .select("id, name, role, room_number")
+        .eq("clinic_id", clinicId)
+        .in("role", ["doctor", "owner"])
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as DoctorRoomRow[];
+    },
+  });
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const valueFor = (d: DoctorRoomRow) =>
+    drafts[d.id] !== undefined ? drafts[d.id] : (d.room_number ?? "");
+
+  const save = async (d: DoctorRoomRow) => {
+    const v = valueFor(d).trim();
+    setSaving(d.id);
+    try {
+      await callAction("set_room", { clinic_user_id: d.id, room_number: v ? v : null });
+      toast.success(`Room saved for ${d.name ?? "doctor"}.`);
+      await qc.invalidateQueries({ queryKey: ["clinic-doctors-rooms", clinicId] });
+      await qc.invalidateQueries({ queryKey: ["clinic-doctors", clinicId] });
+      setDrafts((prev) => {
+        const { [d.id]: _omit, ...rest } = prev;
+        return rest;
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-base">Doctors &amp; rooms</CardTitle></CardHeader>
+      <CardContent className="space-y-2">
+        {q.isLoading ? (
+          <Skeleton className="h-8 w-full" />
+        ) : !(q.data ?? []).length ? (
+          <p className="text-sm text-muted-foreground">No doctors found.</p>
+        ) : (
+          <div className="space-y-2">
+            {q.data!.map((d) => (
+              <div key={d.id} className="flex flex-wrap items-end gap-3 border rounded-md p-3">
+                <div className="flex-1 min-w-[180px]">
+                  <div className="text-sm font-medium">{d.name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{d.role}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`room-${d.id}`} className="text-xs">Room number</Label>
+                  <Input
+                    id={`room-${d.id}`}
+                    value={valueFor(d)}
+                    onChange={(e) => setDrafts((p) => ({ ...p, [d.id]: e.target.value }))}
+                    placeholder="e.g. 3"
+                    className="w-32 min-h-10"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="min-h-10"
+                  disabled={saving === d.id}
+                  onClick={() => save(d)}
+                >
+                  {saving === d.id ? <Loader2 className="size-4 mr-1 animate-spin" /> : <Save className="size-4 mr-1" />}
+                  Save
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
