@@ -348,13 +348,15 @@ function SortableHead({
 }
 
 function RowActions({
-  appt, pendingKind, onConfirm, onCancel, onReschedule, onMarkAttendance, onOpen, onIssueToken,
+  appt, pendingKind, doctors, onConfirm, onCancel, onReschedule, onAssignDoctor, onMarkAttendance, onOpen, onIssueToken,
 }: {
   appt: Appointment;
   pendingKind: string | null;
+  doctors: DoctorRow[];
   onConfirm: () => void;
   onCancel: () => void;
   onReschedule: () => void;
+  onAssignDoctor: (doctorUserId: string | null) => void;
   onMarkAttendance: (a: "came" | "no_show") => void;
   onOpen: () => void;
   onIssueToken: () => void;
@@ -392,6 +394,32 @@ function RowActions({
         >
           {pendingKind === "cancel" ? Spin : <Ban className="size-4 mr-2 text-destructive" />} Cancel
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger disabled={busy}>
+            {pendingKind === "assign" ? Spin : <Stethoscope className="size-4 mr-2 text-primary" />}
+            Assign doctor
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="w-56 max-h-72 overflow-y-auto">
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onAssignDoctor(null); }}>
+                <span className="text-muted-foreground">Unassigned</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {doctors.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">No doctors found</div>
+              ) : doctors.map((d) => (
+                <DropdownMenuItem
+                  key={d.id}
+                  onSelect={(e) => { e.preventDefault(); onAssignDoctor(d.id); }}
+                >
+                  {d.id === appt.doctor_user_id ? <Check className="size-4 mr-2 text-success" /> : <span className="w-4 mr-2" />}
+                  Dr. {d.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={busy}
