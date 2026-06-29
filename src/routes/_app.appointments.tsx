@@ -40,9 +40,10 @@ type SortKey = "scheduled_at" | "appointment_number" | "status";
 const DUBAI_TZ = "Asia/Dubai";
 
 function AppointmentsPage() {
-  const { clinicUser, clinic } = useAuth();
+  const { clinicUser, clinic, hasRole } = useAuth();
   const tz = clinic?.timezone || DUBAI_TZ;
   const clinicId = clinicUser!.clinic_id;
+  const isDoctorOnly = clinicUser!.role === "doctor";
   const qc = useQueryClient();
   const navigate = useNavigate();
 
