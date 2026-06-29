@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
