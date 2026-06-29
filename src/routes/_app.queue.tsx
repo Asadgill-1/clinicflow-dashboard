@@ -56,16 +56,20 @@ function QueuePage() {
 
   const today = todayInDubai();
 
+  const isDoctorOnly = clinicUser!.role === "doctor";
+
   const tokensQ = useQuery({
-    queryKey: ["tokens", clinicId, today],
+    queryKey: ["tokens", clinicId, today, isDoctorOnly ? clinicUser!.id : "all"],
     refetchInterval: 5000,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("tokens")
         .select("*")
         .eq("clinic_id", clinicId)
         .eq("issued_date", today)
         .order("token_number", { ascending: true });
+      if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Token[];
     },
@@ -168,6 +172,7 @@ function QueuePage() {
           </h1>
           <p className="text-sm text-muted-foreground">
             Today’s patient tokens · <span className="tabular">{today}</span> · Asia/Dubai
+            <span className="ml-2 italic">Showing: {isDoctorOnly ? "my patients" : "all"}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">

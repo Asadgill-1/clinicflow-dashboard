@@ -18,11 +18,25 @@ export const Route = createFileRoute("/_app/patients")({
 function PatientsPage() {
   const { clinicUser } = useAuth();
   const clinicId = clinicUser!.clinic_id;
+  const isDoctorOnly = clinicUser!.role === "doctor";
   const [search, setSearch] = useState("");
 
   const patientsQ = useQuery({
-    queryKey: ["patients", clinicId, search],
+    queryKey: ["patients", clinicId, search, isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
+      // For doctor-only view, first collect patient ids assigned to them via appts or tokens.
+      let allowed: Set<string> | null = null;
+      if (isDoctorOnly) {
+        const [a, t] = await Promise.all([
+          supabase.from("appointments").select("patient_id").eq("clinic_id", clinicId).eq("doctor_user_id", clinicUser!.id),
+          supabase.from("tokens").select("patient_id").eq("clinic_id", clinicId).eq("doctor_user_id", clinicUser!.id),
+        ]);
+        allowed = new Set<string>();
+        ((a.data ?? []) as { patient_id: string | null }[]).forEach((r) => r.patient_id && allowed!.add(r.patient_id));
+        ((t.data ?? []) as { patient_id: string | null }[]).forEach((r) => r.patient_id && allowed!.add(r.patient_id));
+        if (allowed.size === 0) return { patients: [] as Patient[], counts: {} as Record<string, { came: number; no_show: number }> };
+      }
+
       let q = supabase
         .from("patients")
         .select("id, name, language_preference, status, pdpl_consent, is_minor")
@@ -30,6 +44,7 @@ function PatientsPage() {
         .order("name", { ascending: true })
         .limit(200);
       if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
+      if (allowed) q = q.in("id", Array.from(allowed));
       const { data, error } = await q;
       if (error) throw error;
       const patients = (data ?? []) as Patient[];
@@ -60,7 +75,10 @@ function PatientsPage() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
-          <p className="text-sm text-muted-foreground">Search and manage clinic patients.</p>
+          <p className="text-sm text-muted-foreground">
+            Search and manage clinic patients.{" "}
+            <span className="ml-1 italic">Showing: {isDoctorOnly ? "my patients" : "all"}</span>
+          </p>
         </div>
         <div className="relative">
           <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />

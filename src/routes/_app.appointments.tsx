@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
@@ -26,7 +27,7 @@ import { callAction, toDubaiISO, type ActionResponse } from "@/lib/api-client";
 import type { Appointment, Patient } from "@/lib/types";
 import {
   MoreHorizontal, ArrowUpDown, CheckCircle2, XCircle, Plus, Loader2,
-  CalendarClock, Ban, Check, Ticket,
+  CalendarClock, Ban, Check, Ticket, Stethoscope,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,9 +41,10 @@ type SortKey = "scheduled_at" | "appointment_number" | "status";
 const DUBAI_TZ = "Asia/Dubai";
 
 function AppointmentsPage() {
-  const { clinicUser, clinic } = useAuth();
+  const { clinicUser, clinic, hasRole } = useAuth();
   const tz = clinic?.timezone || DUBAI_TZ;
   const clinicId = clinicUser!.clinic_id;
+  const isDoctorOnly = clinicUser!.role === "doctor";
   const qc = useQueryClient();
   const navigate = useNavigate();
 
@@ -92,16 +94,31 @@ function AppointmentsPage() {
     return () => { supabase.removeChannel(ch); };
   }, [clinicId, qc]);
 
+  const doctorsQ = useQuery({
+    queryKey: ["clinic-doctors", clinicId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_users")
+        .select("id, name, role, room_number")
+        .eq("clinic_id", clinicId)
+        .in("role", ["doctor", "owner"])
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as DoctorRow[];
+    },
+  });
+
   const apptsQ = useQuery({
-    queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir],
+    queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir, isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
       let q = supabase
         .from("appointments")
-        .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor")
+        .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor, doctor_user_id")
         .eq("clinic_id", clinicId)
         .order(sortKey, { ascending: sortDir === "asc" })
         .limit(200);
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
+      if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
       const { data, error } = await q;
       if (error) throw error;
       const appts = (data ?? []) as Appointment[];
@@ -163,7 +180,12 @@ function AppointmentsPage() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>
-          <p className="text-sm text-muted-foreground">Manage booking status and attendance.</p>
+          <p className="text-sm text-muted-foreground">
+            Manage booking status and attendance.{" "}
+            <span className="ml-1 italic">
+              Showing: {isDoctorOnly ? "my patients" : "all"}
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Status</span>
@@ -211,6 +233,9 @@ function AppointmentsPage() {
                   {rows.map((a) => {
                     const p = apptsQ.data!.patientsById[a.patient_id];
                     const isPending = pending?.id === a.id;
+                    const assignedDoctor =
+                      doctorsQ.data?.find((d) => d.id === a.doctor_user_id) ?? null;
+                    const doctorLabel = assignedDoctor?.name ?? a.doctor ?? null;
                     return (
                       <TableRow key={a.id} className="hover:bg-muted/40">
                         <TableCell className="tabular text-xs">{a.appointment_number ?? "—"}</TableCell>
@@ -218,7 +243,9 @@ function AppointmentsPage() {
                           <Link to="/patients/$id" params={{ id: a.patient_id }} className="hover:underline">
                             {p?.name ?? "Unknown"}
                           </Link>
-                          {a.doctor && <div className="text-xs text-muted-foreground">Dr. {a.doctor}</div>}
+                          <div className="text-xs text-muted-foreground">
+                            {doctorLabel ? `Dr. ${doctorLabel}` : "Unassigned"}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[220px] truncate" title={a.reason ?? ""}>{a.reason ?? "—"}</TableCell>
                         <TableCell className="tabular text-sm">{fmtDateTime(a.scheduled_at, tz)}</TableCell>
@@ -239,6 +266,7 @@ function AppointmentsPage() {
                           <RowActions
                             appt={a}
                             pendingKind={isPending ? pending!.kind : null}
+                            doctors={doctorsQ.data ?? []}
                             onConfirm={() =>
                               runAction(a.id, "confirm", "appt_confirm", { appointment_id: a.id }, "Patient notified — confirmed.")
                             }
@@ -246,6 +274,15 @@ function AppointmentsPage() {
                               runAction(a.id, "cancel", "appt_cancel", { appointment_id: a.id }, "Patient notified — cancelled.")
                             }
                             onReschedule={() => setRescheduleAppt(a)}
+                            onAssignDoctor={(docId) =>
+                              runAction(
+                                a.id,
+                                "assign",
+                                "appt_assign_doctor",
+                                { appointment_id: a.id, doctor_user_id: docId },
+                                docId ? "Doctor assigned." : "Doctor unassigned.",
+                              )
+                            }
                             onMarkAttendance={async (att) => {
                               await runAction(
                                 a.id,
@@ -273,6 +310,7 @@ function AppointmentsPage() {
         open={newOpen}
         onOpenChange={setNewOpen}
         clinicId={clinicId}
+        doctors={doctorsQ.data ?? []}
         onBooked={refetch}
       />
 
@@ -311,13 +349,15 @@ function SortableHead({
 }
 
 function RowActions({
-  appt, pendingKind, onConfirm, onCancel, onReschedule, onMarkAttendance, onOpen, onIssueToken,
+  appt, pendingKind, doctors, onConfirm, onCancel, onReschedule, onAssignDoctor, onMarkAttendance, onOpen, onIssueToken,
 }: {
   appt: Appointment;
   pendingKind: string | null;
+  doctors: DoctorRow[];
   onConfirm: () => void;
   onCancel: () => void;
   onReschedule: () => void;
+  onAssignDoctor: (doctorUserId: string | null) => void;
   onMarkAttendance: (a: "came" | "no_show") => void;
   onOpen: () => void;
   onIssueToken: () => void;
@@ -355,6 +395,32 @@ function RowActions({
         >
           {pendingKind === "cancel" ? Spin : <Ban className="size-4 mr-2 text-destructive" />} Cancel
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger disabled={busy}>
+            {pendingKind === "assign" ? Spin : <Stethoscope className="size-4 mr-2 text-primary" />}
+            Assign doctor
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="w-56 max-h-72 overflow-y-auto">
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onAssignDoctor(null); }}>
+                <span className="text-muted-foreground">Unassigned</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {doctors.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">No doctors found</div>
+              ) : doctors.map((d) => (
+                <DropdownMenuItem
+                  key={d.id}
+                  onSelect={(e) => { e.preventDefault(); onAssignDoctor(d.id); }}
+                >
+                  {d.id === appt.doctor_user_id ? <Check className="size-4 mr-2 text-success" /> : <span className="w-4 mr-2" />}
+                  Dr. {d.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={busy}
@@ -504,17 +570,19 @@ interface ClinicService {
 }
 
 function NewAppointmentDialog({
-  open, onOpenChange, clinicId, onBooked,
+  open, onOpenChange, clinicId, doctors, onBooked,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   clinicId: string;
+  doctors: DoctorRow[];
   onBooked: () => void;
 }) {
   const tz = DUBAI_TZ;
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [service, setService] = useState("");
+  const [doctorId, setDoctorId] = useState<string>("__none__");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -534,7 +602,7 @@ function NewAppointmentDialog({
   });
 
   const reset = () => {
-    setName(""); setPhone(""); setService(""); setDate(""); setTime("");
+    setName(""); setPhone(""); setService(""); setDoctorId("__none__"); setDate(""); setTime("");
     setConflict(null); setSubmitting(false);
   };
 
@@ -555,6 +623,7 @@ function NewAppointmentDialog({
         name: name.trim(),
         phone: phone.trim() || null,
         service,
+        doctor_user_id: doctorId === "__none__" ? null : doctorId,
         preferred_datetime: iso,
         patient_type: "walk_in",
       });
@@ -616,6 +685,18 @@ function NewAppointmentDialog({
                 {!servicesQ.isLoading && !(servicesQ.data ?? []).length && (
                   <div className="px-2 py-1.5 text-sm text-muted-foreground">No services configured.</div>
                 )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2 space-y-1.5">
+            <Label>Doctor</Label>
+            <Select value={doctorId} onValueChange={setDoctorId}>
+              <SelectTrigger className="min-h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Unassigned</SelectItem>
+                {doctors.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
