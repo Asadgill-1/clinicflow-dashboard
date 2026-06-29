@@ -623,6 +623,7 @@ function NewAppointmentDialog({
         name: name.trim(),
         phone: phone.trim() || null,
         service,
+        doctor_user_id: doctorId === "__none__" ? null : doctorId,
         preferred_datetime: iso,
         patient_type: "walk_in",
       });
