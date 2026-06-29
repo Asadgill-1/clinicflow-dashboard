@@ -295,6 +295,8 @@ function SettingsPage() {
         </CardContent>
       </Card>
 
+      <DoctorsRoomsCard clinicId={clinicId} />
+
       {/* Billing (read-only) */}
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Billing</CardTitle></CardHeader>
