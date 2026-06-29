@@ -47,6 +47,7 @@ export interface Appointment {
   attendance_marked_at: string | null;
   review_requested: boolean | null;
   doctor: string | null;
+  doctor_user_id: string | null;
   patient_type: string | null;
 }
 
