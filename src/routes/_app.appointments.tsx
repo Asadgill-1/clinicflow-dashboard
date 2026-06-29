@@ -688,6 +688,17 @@ function NewAppointmentDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="col-span-2 space-y-1.5">
+            <Label>Doctor</Label>
+            <Select value={doctorId} onValueChange={setDoctorId}>
+              <SelectTrigger className="min-h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Unassigned</SelectItem>
+                {doctors.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           <div className="space-y-1.5">
             <Label htmlFor="n-date">Date *</Label>
             <Input id="n-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
