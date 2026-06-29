@@ -232,6 +232,9 @@ function AppointmentsPage() {
                   {rows.map((a) => {
                     const p = apptsQ.data!.patientsById[a.patient_id];
                     const isPending = pending?.id === a.id;
+                    const assignedDoctor =
+                      doctorsQ.data?.find((d) => d.id === a.doctor_user_id) ?? null;
+                    const doctorLabel = assignedDoctor?.name ?? a.doctor ?? null;
                     return (
                       <TableRow key={a.id} className="hover:bg-muted/40">
                         <TableCell className="tabular text-xs">{a.appointment_number ?? "—"}</TableCell>
@@ -239,7 +242,9 @@ function AppointmentsPage() {
                           <Link to="/patients/$id" params={{ id: a.patient_id }} className="hover:underline">
                             {p?.name ?? "Unknown"}
                           </Link>
-                          {a.doctor && <div className="text-xs text-muted-foreground">Dr. {a.doctor}</div>}
+                          <div className="text-xs text-muted-foreground">
+                            {doctorLabel ? `Dr. ${doctorLabel}` : "Unassigned"}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[220px] truncate" title={a.reason ?? ""}>{a.reason ?? "—"}</TableCell>
                         <TableCell className="tabular text-sm">{fmtDateTime(a.scheduled_at, tz)}</TableCell>
@@ -260,6 +265,7 @@ function AppointmentsPage() {
                           <RowActions
                             appt={a}
                             pendingKind={isPending ? pending!.kind : null}
+                            doctors={doctorsQ.data ?? []}
                             onConfirm={() =>
                               runAction(a.id, "confirm", "appt_confirm", { appointment_id: a.id }, "Patient notified — confirmed.")
                             }
@@ -267,6 +273,15 @@ function AppointmentsPage() {
                               runAction(a.id, "cancel", "appt_cancel", { appointment_id: a.id }, "Patient notified — cancelled.")
                             }
                             onReschedule={() => setRescheduleAppt(a)}
+                            onAssignDoctor={(docId) =>
+                              runAction(
+                                a.id,
+                                "assign",
+                                "appt_assign_doctor",
+                                { appointment_id: a.id, doctor_user_id: docId },
+                                docId ? "Doctor assigned." : "Doctor unassigned.",
+                              )
+                            }
                             onMarkAttendance={async (att) => {
                               await runAction(
                                 a.id,
