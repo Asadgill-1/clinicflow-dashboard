@@ -310,6 +310,7 @@ function AppointmentsPage() {
         open={newOpen}
         onOpenChange={setNewOpen}
         clinicId={clinicId}
+        doctors={doctorsQ.data ?? []}
         onBooked={refetch}
       />
 
