@@ -699,6 +699,7 @@ function NewAppointmentDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="n-date">Date *</Label>
             <Input id="n-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
