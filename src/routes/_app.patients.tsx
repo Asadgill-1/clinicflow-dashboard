@@ -75,7 +75,10 @@ function PatientsPage() {
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Patients</h1>
-          <p className="text-sm text-muted-foreground">Search and manage clinic patients.</p>
+          <p className="text-sm text-muted-foreground">
+            Search and manage clinic patients.{" "}
+            <span className="ml-1 italic">Showing: {isDoctorOnly ? "my patients" : "all"}</span>
+          </p>
         </div>
         <div className="relative">
           <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
