@@ -570,17 +570,19 @@ interface ClinicService {
 }
 
 function NewAppointmentDialog({
-  open, onOpenChange, clinicId, onBooked,
+  open, onOpenChange, clinicId, doctors, onBooked,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   clinicId: string;
+  doctors: DoctorRow[];
   onBooked: () => void;
 }) {
   const tz = DUBAI_TZ;
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [service, setService] = useState("");
+  const [doctorId, setDoctorId] = useState<string>("__none__");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [submitting, setSubmitting] = useState(false);
