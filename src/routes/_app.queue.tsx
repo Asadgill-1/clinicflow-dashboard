@@ -172,6 +172,7 @@ function QueuePage() {
           </h1>
           <p className="text-sm text-muted-foreground">
             Today’s patient tokens · <span className="tabular">{today}</span> · Asia/Dubai
+            <span className="ml-2 italic">Showing: {isDoctorOnly ? "my patients" : "all"}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
