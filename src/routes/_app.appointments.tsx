@@ -93,16 +93,31 @@ function AppointmentsPage() {
     return () => { supabase.removeChannel(ch); };
   }, [clinicId, qc]);
 
+  const doctorsQ = useQuery({
+    queryKey: ["clinic-doctors", clinicId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_users")
+        .select("id, name, role, room_number")
+        .eq("clinic_id", clinicId)
+        .in("role", ["doctor", "owner"])
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as DoctorRow[];
+    },
+  });
+
   const apptsQ = useQuery({
-    queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir],
+    queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir, isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
       let q = supabase
         .from("appointments")
-        .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor")
+        .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor, doctor_user_id")
         .eq("clinic_id", clinicId)
         .order(sortKey, { ascending: sortDir === "asc" })
         .limit(200);
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
+      if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
       const { data, error } = await q;
       if (error) throw error;
       const appts = (data ?? []) as Appointment[];
