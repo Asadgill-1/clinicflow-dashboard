@@ -14,14 +14,16 @@ import {
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
 import {
   Ticket as TicketIcon, Plus, RefreshCcw, Monitor, Loader2, Printer, SkipForward, PhoneCall,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import type { Token, ClinicUser, Patient } from "@/lib/types";
+import type { Token, ClinicUser, Patient, Appointment, DoctorNote, Prescription } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/queue")({
   component: QueuePage,
