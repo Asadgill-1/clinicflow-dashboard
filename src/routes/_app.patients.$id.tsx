@@ -247,3 +247,153 @@ function PatientDetail() {
     </div>
   );
 }
+
+function PatientInfoCard({ patient, clinicId }: { patient: Patient; clinicId: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(true);
+  const [editing, setEditing] = useState(false);
+
+  const initial = {
+    phone: patient.phone ?? "",
+    emirates_id: patient.emirates_id ?? "",
+    date_of_birth: patient.date_of_birth ?? "",
+    address: patient.address ?? "",
+    medical_notes: patient.medical_notes ?? "",
+  };
+  const [form, setForm] = useState(initial);
+
+  useEffect(() => {
+    setForm({
+      phone: patient.phone ?? "",
+      emirates_id: patient.emirates_id ?? "",
+      date_of_birth: patient.date_of_birth ?? "",
+      address: patient.address ?? "",
+      medical_notes: patient.medical_notes ?? "",
+    });
+  }, [patient.id, patient.phone, patient.emirates_id, patient.date_of_birth, patient.address, patient.medical_notes]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        phone: form.phone.trim() || null,
+        emirates_id: form.emirates_id.trim() || null,
+        date_of_birth: form.date_of_birth || null,
+        address: form.address.trim() || null,
+        medical_notes: form.medical_notes.trim() || null,
+      };
+      const { error } = await supabase
+        .from("patients")
+        .update(payload)
+        .eq("id", patient.id)
+        .eq("clinic_id", clinicId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Patient details saved");
+      setEditing(false);
+      qc.invalidateQueries({ queryKey: ["patient", patient.id] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const cancel = () => {
+    setForm(initial);
+    setEditing(false);
+  };
+
+  const display = (v: string | null | undefined) =>
+    v && v.toString().trim() ? v : <span className="text-muted-foreground">—</span>;
+
+  const summary = [patient.phone, patient.emirates_id].filter(Boolean).join(" · ") || "No contact details on file";
+
+  return (
+    <Card>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <CollapsibleTrigger className="group inline-flex items-center gap-2 text-left">
+                <CardTitle className="text-base">Patient information</CardTitle>
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=closed]:-rotate-90" />
+              </CollapsibleTrigger>
+              {!open && (
+                <div className="text-xs text-muted-foreground mt-1 tabular truncate">{summary}</div>
+              )}
+            </div>
+            {!editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); setEditing(true); setOpen(true); }}
+                className="min-h-9"
+              >
+                <Pencil className="size-3.5 mr-1.5" /> Edit
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={cancel} disabled={save.isPending}>
+                  Cancel
+                </Button>
+                <Button type="button" size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+                  {save.isPending ? <><Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving…</> : "Save"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="pt-2">
+            {!editing ? (
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <Field label="Phone"><span className="tabular">{display(patient.phone)}</span></Field>
+                <Field label="Emirates ID"><span className="tabular">{display(patient.emirates_id)}</span></Field>
+                <Field label="Date of birth"><span className="tabular">{display(patient.date_of_birth)}</span></Field>
+                <Field label="Address" full>{display(patient.address)}</Field>
+                <Field label="Medical notes" full>
+                  <span className="whitespace-pre-wrap">{display(patient.medical_notes)}</span>
+                </Field>
+              </dl>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <EditField label="Phone">
+                  <Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+971 …" />
+                </EditField>
+                <EditField label="Emirates ID">
+                  <Input value={form.emirates_id} onChange={(e) => setForm({ ...form, emirates_id: e.target.value })} placeholder="784-…" />
+                </EditField>
+                <EditField label="Date of birth">
+                  <Input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} />
+                </EditField>
+                <EditField label="Address" full>
+                  <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                </EditField>
+                <EditField label="Medical notes" full>
+                  <Textarea rows={3} value={form.medical_notes} onChange={(e) => setForm({ ...form, medical_notes: e.target.value })} />
+                </EditField>
+              </div>
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
+function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div className={full ? "sm:col-span-2" : ""}>
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground mb-1">{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+function EditField({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div className={full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
+      <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
