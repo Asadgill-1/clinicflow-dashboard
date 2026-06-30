@@ -24,6 +24,7 @@ import { Link } from "@tanstack/react-router";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { Token, ClinicUser, Patient, Appointment, DoctorNote, Prescription } from "@/lib/types";
+import { PrescriptionForm, PrescriptionCard } from "@/components/Prescriptions";
 
 export const Route = createFileRoute("/_app/queue")({
   component: QueuePage,
@@ -233,6 +234,8 @@ function QueuePage() {
           patientName={myServing.patient_name}
           tz={clinic?.timezone || DUBAI_TZ}
           authorUserId={clinicUser!.auth_user_id}
+          doctorName={clinicUser!.name}
+          clinicName={clinic?.name ?? "Clinic"}
         />
       )}
 
@@ -577,18 +580,18 @@ function SlipDialog({
 /* ---------------- Consultation Panel ---------------- */
 
 function ConsultationPanel({
-  clinicId, patientId, patientName, tz, authorUserId,
+  clinicId, patientId, patientName, tz, authorUserId, doctorName, clinicName,
 }: {
   clinicId: string;
   patientId: string;
   patientName: string | null;
   tz: string;
   authorUserId: string;
+  doctorName: string | null;
+  clinicName: string;
 }) {
   const qc = useQueryClient();
-  const [rxDraft, setRxDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
-  const [savingRx, setSavingRx] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
 
   const historyQ = useQuery({
@@ -609,25 +612,6 @@ function ConsultationPanel({
   });
 
   const refetch = () => qc.invalidateQueries({ queryKey: ["consult-history", clinicId, patientId] });
-
-  const saveRx = async () => {
-    const body = rxDraft.trim();
-    if (!body) return;
-    setSavingRx(true);
-    try {
-      const { error } = await supabase.from("prescriptions").insert({
-        clinic_id: clinicId, patient_id: patientId, author_user_id: authorUserId, body,
-      });
-      if (error) throw error;
-      toast.success("Prescription added.");
-      setRxDraft("");
-      refetch();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSavingRx(false);
-    }
-  };
 
   const saveNote = async () => {
     const note = noteDraft.trim();
@@ -668,15 +652,16 @@ function ConsultationPanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Add prescription</Label>
-            <Textarea value={rxDraft} onChange={(e) => setRxDraft(e.target.value)} rows={3} placeholder="Rx…" />
-            <div className="flex justify-end">
-              <Button size="sm" onClick={saveRx} disabled={savingRx || !rxDraft.trim()} className="min-h-10">
-                {savingRx ? <><Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving…</> : "Save prescription"}
-              </Button>
-            </div>
+            <PrescriptionForm
+              clinicId={clinicId}
+              patientId={patientId}
+              authorUserId={authorUserId}
+              doctorName={doctorName}
+              onSaved={refetch}
+            />
           </div>
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Add note</Label>
@@ -729,14 +714,17 @@ function ConsultationPanel({
             {(historyQ.data?.rx ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">None.</div>
             ) : (
-              <ul className="space-y-2">
+              <div className="space-y-2">
                 {historyQ.data!.rx.map((r) => (
-                  <li key={r.id} className="rounded-md border border-border p-2 text-xs">
-                    <div className="tabular text-muted-foreground mb-1">{fmtDateTime(r.created_at, tz)}</div>
-                    <div className="whitespace-pre-wrap">{r.body}</div>
-                  </li>
+                  <PrescriptionCard
+                    key={r.id}
+                    rx={r}
+                    clinicName={clinicName}
+                    patientName={patientName}
+                    tz={tz}
+                  />
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
@@ -744,3 +732,4 @@ function ConsultationPanel({
     </Card>
   );
 }
+
