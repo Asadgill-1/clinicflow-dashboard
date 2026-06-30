@@ -73,6 +73,27 @@ function PatientDetail() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const [rxDraft, setRxDraft] = useState("");
+  const addRx = useMutation({
+    mutationFn: async () => {
+      const text = rxDraft.trim();
+      if (!text) throw new Error("Prescription is empty.");
+      const { error } = await supabase.from("prescriptions").insert({
+        clinic_id: clinicId,
+        patient_id: id,
+        author_user_id: clinicUser!.auth_user_id,
+        body: text,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Prescription added.");
+      setRxDraft("");
+      qc.invalidateQueries({ queryKey: ["patient", id] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   if (patientQ.isLoading) return <div className="space-y-3"><TableSkeleton rows={6} cols={4} /></div>;
   const p = patientQ.data?.patient;
   if (!p) return <EmptyState title="Patient not found" hint="They may belong to a different clinic." />;
