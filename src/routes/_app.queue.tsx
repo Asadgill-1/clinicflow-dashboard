@@ -233,6 +233,8 @@ function QueuePage() {
           patientName={myServing.patient_name}
           tz={clinic?.timezone || DUBAI_TZ}
           authorUserId={clinicUser!.auth_user_id}
+          doctorName={clinicUser!.name}
+          clinicName={clinic?.name ?? "Clinic"}
         />
       )}
 
