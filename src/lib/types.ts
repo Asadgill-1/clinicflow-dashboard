@@ -76,13 +76,22 @@ export interface DoctorNote {
   created_at: string;
 }
 
+export interface PrescriptionItem {
+  drug: string;
+  dose: string | null;
+  frequency: string | null;
+  duration: string | null;
+}
+
 export interface Prescription {
   id: string;
   clinic_id: string;
   patient_id: string;
   appointment_id: string | null;
   author_user_id: string | null;
-  body: string;
+  doctor_name: string | null;
+  items: PrescriptionItem[];
+  body: string | null;
   created_at: string;
 }
 
