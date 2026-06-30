@@ -224,6 +224,16 @@ function QueuePage() {
         </Card>
       )}
 
+      {isDoctor && myServing?.patient_id && (
+        <ConsultationPanel
+          clinicId={clinicId}
+          patientId={myServing.patient_id}
+          patientName={myServing.patient_name}
+          tz={clinic?.timezone || DUBAI_TZ}
+          authorUserId={clinicUser!.auth_user_id}
+        />
+      )}
+
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Queue board</h2>
         {tokensQ.isLoading ? (
