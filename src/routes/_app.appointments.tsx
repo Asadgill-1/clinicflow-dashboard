@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_app/appointments")({
   component: AppointmentsPage,
 });
 
-type SortKey = "scheduled_at" | "appointment_number" | "status";
+
 
 const DUBAI_TZ = "Asia/Dubai";
 
