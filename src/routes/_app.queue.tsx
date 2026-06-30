@@ -24,6 +24,7 @@ import { Link } from "@tanstack/react-router";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { Token, ClinicUser, Patient, Appointment, DoctorNote, Prescription } from "@/lib/types";
+import { PrescriptionForm, PrescriptionCard } from "@/components/Prescriptions";
 
 export const Route = createFileRoute("/_app/queue")({
   component: QueuePage,
