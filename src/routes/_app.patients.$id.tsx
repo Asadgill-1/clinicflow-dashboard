@@ -109,7 +109,10 @@ function PatientDetail() {
         </CardContent>
       </Card>
 
+      <PatientInfoCard patient={p} clinicId={clinicId} />
+
       <Tabs defaultValue="bookings">
+
         <TabsList>
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
           <TabsTrigger value="conversations">Conversations</TabsTrigger>
