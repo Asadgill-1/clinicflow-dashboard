@@ -76,6 +76,16 @@ export interface DoctorNote {
   created_at: string;
 }
 
+export interface Prescription {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  author_user_id: string | null;
+  body: string;
+  created_at: string;
+}
+
 export interface Review {
   id: string;
   clinic_id: string;

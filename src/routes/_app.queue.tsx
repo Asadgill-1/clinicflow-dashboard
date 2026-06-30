@@ -14,14 +14,16 @@ import {
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
 import {
   Ticket as TicketIcon, Plus, RefreshCcw, Monitor, Loader2, Printer, SkipForward, PhoneCall,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import type { Token, ClinicUser, Patient } from "@/lib/types";
+import type { Token, ClinicUser, Patient, Appointment, DoctorNote, Prescription } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/queue")({
   component: QueuePage,
@@ -222,6 +224,16 @@ function QueuePage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {isDoctor && myServing?.patient_id && (
+        <ConsultationPanel
+          clinicId={clinicId}
+          patientId={myServing.patient_id}
+          patientName={myServing.patient_name}
+          tz={clinic?.timezone || DUBAI_TZ}
+          authorUserId={clinicUser!.auth_user_id}
+        />
       )}
 
       <div>
@@ -559,5 +571,176 @@ function SlipDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ---------------- Consultation Panel ---------------- */
+
+function ConsultationPanel({
+  clinicId, patientId, patientName, tz, authorUserId,
+}: {
+  clinicId: string;
+  patientId: string;
+  patientName: string | null;
+  tz: string;
+  authorUserId: string;
+}) {
+  const qc = useQueryClient();
+  const [rxDraft, setRxDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingRx, setSavingRx] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+
+  const historyQ = useQuery({
+    queryKey: ["consult-history", clinicId, patientId],
+    enabled: !!patientId,
+    queryFn: async () => {
+      const [appts, notes, rx] = await Promise.all([
+        supabase.from("appointments").select("*").eq("clinic_id", clinicId).eq("patient_id", patientId).order("scheduled_at", { ascending: false }).limit(8),
+        supabase.from("doctor_notes").select("*").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }).limit(5),
+        supabase.from("prescriptions").select("*").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }).limit(5),
+      ]);
+      return {
+        appts: (appts.data ?? []) as Appointment[],
+        notes: (notes.data ?? []) as DoctorNote[],
+        rx: (rx.data ?? []) as Prescription[],
+      };
+    },
+  });
+
+  const refetch = () => qc.invalidateQueries({ queryKey: ["consult-history", clinicId, patientId] });
+
+  const saveRx = async () => {
+    const body = rxDraft.trim();
+    if (!body) return;
+    setSavingRx(true);
+    try {
+      const { error } = await supabase.from("prescriptions").insert({
+        clinic_id: clinicId, patient_id: patientId, author_user_id: authorUserId, body,
+      });
+      if (error) throw error;
+      toast.success("Prescription added.");
+      setRxDraft("");
+      refetch();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingRx(false);
+    }
+  };
+
+  const saveNote = async () => {
+    const note = noteDraft.trim();
+    if (!note) return;
+    setSavingNote(true);
+    try {
+      const { error } = await supabase.from("doctor_notes").insert({
+        clinic_id: clinicId, patient_id: patientId, author_user_id: authorUserId, note,
+      });
+      if (error) throw error;
+      toast.success("Note added.");
+      setNoteDraft("");
+      refetch();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const appts = historyQ.data?.appts ?? [];
+  const came = appts.filter((a) => a.attendance === "came").length;
+  const noShow = appts.filter((a) => a.attendance === "no_show").length;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center justify-between gap-2 flex-wrap">
+          <span>
+            With patient —{" "}
+            <Link to="/patients/$id" params={{ id: patientId }} className="text-primary hover:underline">
+              {patientName ?? "Patient"}
+            </Link>
+          </span>
+          <span className="text-xs text-muted-foreground tabular font-normal">
+            <span className="text-success">{came}</span> came · <span className="text-destructive">{noShow}</span> no-show
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Add prescription</Label>
+            <Textarea value={rxDraft} onChange={(e) => setRxDraft(e.target.value)} rows={3} placeholder="Rx…" />
+            <div className="flex justify-end">
+              <Button size="sm" onClick={saveRx} disabled={savingRx || !rxDraft.trim()} className="min-h-10">
+                {savingRx ? <><Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving…</> : "Save prescription"}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Add note</Label>
+            <Textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} rows={3} placeholder="Clinical note…" />
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={saveNote} disabled={savingNote || !noteDraft.trim()} className="min-h-10">
+                {savingNote ? <><Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving…</> : "Save note"}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Recent appointments</div>
+            {appts.length === 0 ? (
+              <div className="text-sm text-muted-foreground">None.</div>
+            ) : (
+              <ul className="space-y-2">
+                {appts.map((a) => (
+                  <li key={a.id} className="rounded-md border border-border p-2 text-xs space-y-1">
+                    <div className="tabular text-muted-foreground">{fmtDateTime(a.scheduled_at, tz)}</div>
+                    <div className="truncate">{a.reason ?? "—"}</div>
+                    <div className="flex flex-wrap gap-1">
+                      <StatusBadge tone={appointmentStatusTone(a.status)}>{a.status}</StatusBadge>
+                      {a.attendance && <StatusBadge tone={attendanceTone(a.attendance)}>{a.attendance.replace("_", "-")}</StatusBadge>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Recent doctor notes</div>
+            {(historyQ.data?.notes ?? []).length === 0 ? (
+              <div className="text-sm text-muted-foreground">None.</div>
+            ) : (
+              <ul className="space-y-2">
+                {historyQ.data!.notes.map((n) => (
+                  <li key={n.id} className="rounded-md border border-border p-2 text-xs">
+                    <div className="tabular text-muted-foreground mb-1">{fmtDateTime(n.created_at, tz)}</div>
+                    <div className="whitespace-pre-wrap">{n.note}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Recent prescriptions</div>
+            {(historyQ.data?.rx ?? []).length === 0 ? (
+              <div className="text-sm text-muted-foreground">None.</div>
+            ) : (
+              <ul className="space-y-2">
+                {historyQ.data!.rx.map((r) => (
+                  <li key={r.id} className="rounded-md border border-border p-2 text-xs">
+                    <div className="tabular text-muted-foreground mb-1">{fmtDateTime(r.created_at, tz)}</div>
+                    <div className="whitespace-pre-wrap">{r.body}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

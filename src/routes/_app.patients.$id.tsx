@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { StatusBadge, patientStatusTone, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
-import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog } from "@/lib/types";
+import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog, Prescription } from "@/lib/types";
 import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,12 +33,13 @@ function PatientDetail() {
   const patientQ = useQuery({
     queryKey: ["patient", id],
     queryFn: async () => {
-      const [p, appts, convs, notes, consents] = await Promise.all([
+      const [p, appts, convs, notes, consents, rx] = await Promise.all([
         supabase.from("patients").select("*").eq("id", id).eq("clinic_id", clinicId).maybeSingle(),
         supabase.from("appointments").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("scheduled_at", { ascending: false }).limit(50),
         supabase.from("conversations").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
         supabase.from("doctor_notes").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
         supabase.from("consent_logs").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
+        supabase.from("prescriptions").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
       ]);
       return {
         patient: (p.data as Patient | null) ?? null,
@@ -46,6 +47,7 @@ function PatientDetail() {
         convs: (convs.data ?? []) as Conversation[],
         notes: (notes.data ?? []) as DoctorNote[],
         consents: (consents.data ?? []) as ConsentLog[],
+        prescriptions: (rx.data ?? []) as Prescription[],
       };
     },
   });
@@ -66,6 +68,27 @@ function PatientDetail() {
     onSuccess: () => {
       toast.success("Note added.");
       setNoteDraft("");
+      qc.invalidateQueries({ queryKey: ["patient", id] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const [rxDraft, setRxDraft] = useState("");
+  const addRx = useMutation({
+    mutationFn: async () => {
+      const text = rxDraft.trim();
+      if (!text) throw new Error("Prescription is empty.");
+      const { error } = await supabase.from("prescriptions").insert({
+        clinic_id: clinicId,
+        patient_id: id,
+        author_user_id: clinicUser!.auth_user_id,
+        body: text,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Prescription added.");
+      setRxDraft("");
       qc.invalidateQueries({ queryKey: ["patient", id] });
     },
     onError: (e) => toast.error((e as Error).message),
@@ -117,6 +140,7 @@ function PatientDetail() {
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
           <TabsTrigger value="conversations">Conversations</TabsTrigger>
           <TabsTrigger value="notes">Doctor notes</TabsTrigger>
+          <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           <TabsTrigger value="consents">Consent audit</TabsTrigger>
         </TabsList>
 
@@ -215,6 +239,50 @@ function PatientDetail() {
                     <li key={n.id} className="rounded-md border border-border p-3 text-sm">
                       <div className="text-xs text-muted-foreground tabular mb-1">{fmtDateTime(n.created_at, tz)}</div>
                       <div className="whitespace-pre-wrap">{n.note}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="prescriptions" className="mt-4 space-y-3">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base inline-flex items-center gap-2">
+                <MessageSquare className="size-4" /> Prescriptions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {canEditNotes ? (
+                <form
+                  onSubmit={(e) => { e.preventDefault(); addRx.mutate(); }}
+                  className="space-y-2"
+                >
+                  <Textarea
+                    value={rxDraft}
+                    onChange={(e) => setRxDraft(e.target.value)}
+                    placeholder="Write a prescription…"
+                    rows={3}
+                  />
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={addRx.isPending || !rxDraft.trim()} className="min-h-10">
+                      {addRx.isPending ? <><Loader2 className="size-3.5 mr-1.5 animate-spin" /> Saving…</> : "Add prescription"}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <p className="text-sm text-muted-foreground">Read-only. Doctors and owners can add prescriptions.</p>
+              )}
+              {patientQ.data!.prescriptions.length === 0 ? (
+                <EmptyState title="No prescriptions yet" />
+              ) : (
+                <ul className="space-y-2">
+                  {patientQ.data!.prescriptions.map((r) => (
+                    <li key={r.id} className="rounded-md border border-border p-3 text-sm">
+                      <div className="text-xs text-muted-foreground tabular mb-1">{fmtDateTime(r.created_at, tz)}</div>
+                      <div className="whitespace-pre-wrap">{r.body}</div>
                     </li>
                   ))}
                 </ul>
