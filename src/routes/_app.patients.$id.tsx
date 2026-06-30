@@ -140,6 +140,7 @@ function PatientDetail() {
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
           <TabsTrigger value="conversations">Conversations</TabsTrigger>
           <TabsTrigger value="notes">Doctor notes</TabsTrigger>
+          <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           <TabsTrigger value="consents">Consent audit</TabsTrigger>
         </TabsList>
 
