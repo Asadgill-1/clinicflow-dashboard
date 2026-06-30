@@ -47,9 +47,6 @@ function AppointmentsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("scheduled_at");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [newOpen, setNewOpen] = useState(false);
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
   const [issueAppt, setIssueAppt] = useState<Appointment | null>(null);
