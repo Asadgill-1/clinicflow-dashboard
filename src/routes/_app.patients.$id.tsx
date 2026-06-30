@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { StatusBadge, patientStatusTone, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
-import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog } from "@/lib/types";
+import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog, Prescription } from "@/lib/types";
 import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
