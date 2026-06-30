@@ -7,12 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
-import {
-  Table, TableHeader, TableHead, TableRow, TableBody, TableCell,
-} from "@/components/ui/table";
+
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -26,7 +25,7 @@ import { fmtDateTime } from "@/lib/format";
 import { callAction, toDubaiISO, type ActionResponse } from "@/lib/api-client";
 import type { Appointment, Patient } from "@/lib/types";
 import {
-  MoreHorizontal, ArrowUpDown, CheckCircle2, XCircle, Plus, Loader2,
+  MoreHorizontal, CheckCircle2, XCircle, Plus, Loader2,
   CalendarClock, Ban, Check, Ticket, Stethoscope,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +35,7 @@ export const Route = createFileRoute("/_app/appointments")({
   component: AppointmentsPage,
 });
 
-type SortKey = "scheduled_at" | "appointment_number" | "status";
+
 
 const DUBAI_TZ = "Asia/Dubai";
 
@@ -48,9 +47,6 @@ function AppointmentsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("scheduled_at");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [newOpen, setNewOpen] = useState(false);
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
   const [issueAppt, setIssueAppt] = useState<Appointment | null>(null);
@@ -109,15 +105,14 @@ function AppointmentsPage() {
   });
 
   const apptsQ = useQuery({
-    queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir, isDoctorOnly ? clinicUser!.id : "all"],
+    queryKey: ["appointments", clinicId, isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
       let q = supabase
         .from("appointments")
         .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor, doctor_user_id")
         .eq("clinic_id", clinicId)
-        .order(sortKey, { ascending: sortDir === "asc" })
+        .order("scheduled_at", { ascending: true })
         .limit(200);
-      if (statusFilter !== "all") q = q.eq("status", statusFilter);
       if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
       const { data, error } = await q;
       if (error) throw error;
@@ -168,12 +163,172 @@ function AppointmentsPage() {
     }
   };
 
-  const toggleSort = (k: SortKey) => {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(k); setSortDir("desc"); }
+
+  const buckets = useMemo(() => {
+    const rows = apptsQ.data?.appts ?? [];
+    const by = (s: Appointment["status"]) =>
+      rows
+        .filter((a) => a.status === s)
+        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+    return {
+      requested: by("requested"),
+      confirmed: by("confirmed"),
+      cancelled: by("cancelled"),
+    };
+  }, [apptsQ.data]);
+
+  const renderCard = (a: Appointment, column: "requested" | "confirmed" | "cancelled") => {
+    const p = apptsQ.data!.patientsById[a.patient_id];
+    const isPending = pending?.id === a.id;
+    const pendingKind = isPending ? pending!.kind : null;
+    const assignedDoctor = doctorsQ.data?.find((d) => d.id === a.doctor_user_id) ?? null;
+    const doctorLabel = assignedDoctor?.name ?? a.doctor ?? null;
+    const muted = column === "cancelled";
+
+    return (
+      <div
+        key={a.id}
+        className={`rounded-md border border-border bg-card p-3 space-y-2 ${muted ? "opacity-60" : ""}`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <Link
+              to="/patients/$id"
+              params={{ id: a.patient_id }}
+              className="font-medium text-sm hover:underline block truncate"
+            >
+              {p?.name ?? "Unknown"}
+            </Link>
+            <div className="text-[11px] text-muted-foreground tabular truncate">
+              {a.appointment_number ?? "—"}
+            </div>
+          </div>
+          <RowActions
+            appt={a}
+            pendingKind={pendingKind}
+            doctors={doctorsQ.data ?? []}
+            onConfirm={() =>
+              runAction(a.id, "confirm", "appt_confirm", { appointment_id: a.id }, "Patient notified — confirmed.")
+            }
+            onCancel={() =>
+              runAction(a.id, "cancel", "appt_cancel", { appointment_id: a.id }, "Patient notified — cancelled.")
+            }
+            onReschedule={() => setRescheduleAppt(a)}
+            onAssignDoctor={(docId) =>
+              runAction(
+                a.id,
+                "assign",
+                "appt_assign_doctor",
+                { appointment_id: a.id, doctor_user_id: docId },
+                docId ? "Doctor assigned." : "Doctor unassigned.",
+              )
+            }
+            onMarkAttendance={async (att) => {
+              await runAction(
+                a.id,
+                att === "came" ? "came" : "no_show",
+                "attendance_mark",
+                { appointment_id: a.id, attendance: att },
+                `Marked ${att === "came" ? "came" : "no-show"}.`,
+              );
+            }}
+            onOpen={() => navigate({ to: "/patients/$id", params: { id: a.patient_id } })}
+            onIssueToken={() => setIssueAppt(a)}
+          />
+        </div>
+
+        <div className="text-xs tabular text-foreground">
+          {fmtDateTime(a.scheduled_at, tz)}
+          {a.duration_min != null && <span className="text-muted-foreground"> · {a.duration_min}m</span>}
+        </div>
+
+        {a.reason && (
+          <div className="text-xs text-muted-foreground line-clamp-2" title={a.reason}>
+            {a.reason}
+          </div>
+        )}
+
+        <div className="text-xs text-muted-foreground">
+          {doctorLabel ? `Dr. ${doctorLabel}` : "Unassigned"}
+        </div>
+
+        <div className="flex items-center flex-wrap gap-2">
+          {a.attendance && (
+            <StatusBadge tone={attendanceTone(a.attendance)}>
+              {a.attendance.replace("_", "-")}
+            </StatusBadge>
+          )}
+          <TokenCell
+            token={tokensQ.data?.[a.id] ?? null}
+            onIssue={() => setIssueAppt(a)}
+          />
+        </div>
+
+        {column === "requested" && (
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Button
+              size="sm"
+              className="bg-success text-success-foreground hover:bg-success/90 min-h-9"
+              disabled={isPending}
+              onClick={() =>
+                runAction(a.id, "confirm", "appt_confirm", { appointment_id: a.id }, "Patient notified — confirmed.")
+              }
+            >
+              {pendingKind === "confirm" ? <Loader2 className="size-4 mr-1 animate-spin" /> : <Check className="size-4 mr-1" />}
+              Confirm
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="min-h-9"
+              disabled={isPending}
+              onClick={() =>
+                runAction(a.id, "cancel", "appt_cancel", { appointment_id: a.id }, "Patient notified — cancelled.")
+              }
+            >
+              {pendingKind === "cancel" ? <Loader2 className="size-4 mr-1 animate-spin" /> : <XCircle className="size-4 mr-1" />}
+              Reject
+            </Button>
+          </div>
+        )}
+
+        {column === "confirmed" && (
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-9"
+              disabled={isPending}
+              onClick={() =>
+                runAction(a.id, "came", "attendance_mark", { appointment_id: a.id, attendance: "came" }, "Marked came.")
+              }
+            >
+              {pendingKind === "came" ? <Loader2 className="size-4 mr-1 animate-spin" /> : <CheckCircle2 className="size-4 mr-1 text-success" />}
+              Came
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-9"
+              disabled={isPending}
+              onClick={() =>
+                runAction(a.id, "no_show", "attendance_mark", { appointment_id: a.id, attendance: "no_show" }, "Marked no-show.")
+              }
+            >
+              {pendingKind === "no_show" ? <Loader2 className="size-4 mr-1 animate-spin" /> : <XCircle className="size-4 mr-1 text-destructive" />}
+              No-show
+            </Button>
+          </div>
+        )}
+      </div>
+    );
   };
 
-  const rows = useMemo(() => apptsQ.data?.appts ?? [], [apptsQ.data]);
+  const columns: Array<{ key: "requested" | "confirmed" | "cancelled"; label: string }> = [
+    { key: "requested", label: "Requested" },
+    { key: "confirmed", label: "Confirmed" },
+    { key: "cancelled", label: "Cancelled" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -188,123 +343,42 @@ function AppointmentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Status</span>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px] min-h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="requested">Requested</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
           <Button onClick={() => setNewOpen(true)} className="min-h-10">
             <Plus className="size-4 mr-1" /> New appointment
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Schedule</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {apptsQ.isLoading ? (
-            <TableSkeleton rows={8} cols={6} />
-          ) : !rows.length ? (
-            <EmptyState title="No appointments found" hint="Try changing the status filter." />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortableHead onClick={() => toggleSort("appointment_number")} active={sortKey === "appointment_number"}>Ref</SortableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <SortableHead onClick={() => toggleSort("scheduled_at")} active={sortKey === "scheduled_at"}>Scheduled</SortableHead>
-                    <TableHead className="text-right">Duration</TableHead>
-                    <SortableHead onClick={() => toggleSort("status")} active={sortKey === "status"}>Status</SortableHead>
-                    <TableHead>Attendance</TableHead>
-                    <TableHead>Token</TableHead>
-                    <TableHead className="w-10" aria-label="actions" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((a) => {
-                    const p = apptsQ.data!.patientsById[a.patient_id];
-                    const isPending = pending?.id === a.id;
-                    const assignedDoctor =
-                      doctorsQ.data?.find((d) => d.id === a.doctor_user_id) ?? null;
-                    const doctorLabel = assignedDoctor?.name ?? a.doctor ?? null;
-                    return (
-                      <TableRow key={a.id} className="hover:bg-muted/40">
-                        <TableCell className="tabular text-xs">{a.appointment_number ?? "—"}</TableCell>
-                        <TableCell>
-                          <Link to="/patients/$id" params={{ id: a.patient_id }} className="hover:underline">
-                            {p?.name ?? "Unknown"}
-                          </Link>
-                          <div className="text-xs text-muted-foreground">
-                            {doctorLabel ? `Dr. ${doctorLabel}` : "Unassigned"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-[220px] truncate" title={a.reason ?? ""}>{a.reason ?? "—"}</TableCell>
-                        <TableCell className="tabular text-sm">{fmtDateTime(a.scheduled_at, tz)}</TableCell>
-                        <TableCell className="tabular text-right">{a.duration_min ?? "—"}m</TableCell>
-                        <TableCell><StatusBadge tone={appointmentStatusTone(a.status)}>{a.status}</StatusBadge></TableCell>
-                        <TableCell>
-                          {a.attendance
-                            ? <StatusBadge tone={attendanceTone(a.attendance)}>{a.attendance.replace("_", "-")}</StatusBadge>
-                            : <span className="text-xs text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          <TokenCell
-                            token={tokensQ.data?.[a.id] ?? null}
-                            onIssue={() => setIssueAppt(a)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <RowActions
-                            appt={a}
-                            pendingKind={isPending ? pending!.kind : null}
-                            doctors={doctorsQ.data ?? []}
-                            onConfirm={() =>
-                              runAction(a.id, "confirm", "appt_confirm", { appointment_id: a.id }, "Patient notified — confirmed.")
-                            }
-                            onCancel={() =>
-                              runAction(a.id, "cancel", "appt_cancel", { appointment_id: a.id }, "Patient notified — cancelled.")
-                            }
-                            onReschedule={() => setRescheduleAppt(a)}
-                            onAssignDoctor={(docId) =>
-                              runAction(
-                                a.id,
-                                "assign",
-                                "appt_assign_doctor",
-                                { appointment_id: a.id, doctor_user_id: docId },
-                                docId ? "Doctor assigned." : "Doctor unassigned.",
-                              )
-                            }
-                            onMarkAttendance={async (att) => {
-                              await runAction(
-                                a.id,
-                                att === "came" ? "came" : "no_show",
-                                "attendance_mark",
-                                { appointment_id: a.id, attendance: att },
-                                `Marked ${att === "came" ? "came" : "no-show"}.`,
-                              );
-                            }}
-                            onOpen={() => navigate({ to: "/patients/$id", params: { id: a.patient_id } })}
-                            onIssueToken={() => setIssueAppt(a)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {apptsQ.isLoading ? (
+        <TableSkeleton rows={6} cols={3} />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {columns.map((col) => {
+            const items = buckets[col.key];
+            return (
+              <Card key={col.key}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <StatusBadge tone={appointmentStatusTone(col.key)}>{col.label}</StatusBadge>
+                    </span>
+                    <span className="text-xs tabular text-muted-foreground">{items.length}</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                    {items.length === 0 ? (
+                      <EmptyState title="No appointments" />
+                    ) : (
+                      items.map((a) => renderCard(a, col.key))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       <NewAppointmentDialog
         open={newOpen}
@@ -335,18 +409,7 @@ function AppointmentsPage() {
   );
 }
 
-function SortableHead({
-  children, onClick, active,
-}: { children: React.ReactNode; onClick: () => void; active: boolean }) {
-  return (
-    <TableHead>
-      <button onClick={onClick} className="inline-flex items-center gap-1 hover:text-foreground" aria-pressed={active}>
-        {children}
-        <ArrowUpDown className={`size-3 ${active ? "text-primary" : "text-muted-foreground"}`} />
-      </button>
-    </TableHead>
-  );
-}
+
 
 function RowActions({
   appt, pendingKind, doctors, onConfirm, onCancel, onReschedule, onAssignDoctor, onMarkAttendance, onOpen, onIssueToken,
