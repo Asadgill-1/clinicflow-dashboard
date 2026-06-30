@@ -1,18 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StatusBadge, patientStatusTone, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
 import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog } from "@/lib/types";
-import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
 
 export const Route = createFileRoute("/_app/patients/$id")({
   component: PatientDetail,
