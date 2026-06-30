@@ -25,7 +25,7 @@ import { fmtDateTime } from "@/lib/format";
 import { callAction, toDubaiISO, type ActionResponse } from "@/lib/api-client";
 import type { Appointment, Patient } from "@/lib/types";
 import {
-  MoreHorizontal, ArrowUpDown, CheckCircle2, XCircle, Plus, Loader2,
+  MoreHorizontal, CheckCircle2, XCircle, Plus, Loader2,
   CalendarClock, Ban, Check, Ticket, Stethoscope,
 } from "lucide-react";
 import { toast } from "sonner";
