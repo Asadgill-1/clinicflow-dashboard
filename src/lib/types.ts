@@ -32,6 +32,11 @@ export interface Patient {
   doctor_notes_summary: string | null;
   channel: string | null;
   channel_user_id: string | null;
+  phone: string | null;
+  emirates_id: string | null;
+  date_of_birth: string | null;
+  address: string | null;
+  medical_notes: string | null;
 }
 
 export interface Appointment {
