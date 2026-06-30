@@ -105,15 +105,14 @@ function AppointmentsPage() {
   });
 
   const apptsQ = useQuery({
-    queryKey: ["appointments", clinicId, statusFilter, sortKey, sortDir, isDoctorOnly ? clinicUser!.id : "all"],
+    queryKey: ["appointments", clinicId, isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
       let q = supabase
         .from("appointments")
         .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor, doctor_user_id")
         .eq("clinic_id", clinicId)
-        .order(sortKey, { ascending: sortDir === "asc" })
+        .order("scheduled_at", { ascending: true })
         .limit(200);
-      if (statusFilter !== "all") q = q.eq("status", statusFilter);
       if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
       const { data, error } = await q;
       if (error) throw error;
@@ -164,10 +163,6 @@ function AppointmentsPage() {
     }
   };
 
-  const toggleSort = (k: SortKey) => {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(k); setSortDir("desc"); }
-  };
 
   const rows = useMemo(() => apptsQ.data?.appts ?? [], [apptsQ.data]);
 
