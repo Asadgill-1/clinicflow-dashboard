@@ -15,6 +15,7 @@ import { TableSkeleton, EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
 import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog, Prescription } from "@/lib/types";
 import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Loader2 } from "lucide-react";
+import { PrescriptionForm, PrescriptionCard } from "@/components/Prescriptions";
 import { toast } from "sonner";
 
 
