@@ -33,12 +33,13 @@ function PatientDetail() {
   const patientQ = useQuery({
     queryKey: ["patient", id],
     queryFn: async () => {
-      const [p, appts, convs, notes, consents] = await Promise.all([
+      const [p, appts, convs, notes, consents, rx] = await Promise.all([
         supabase.from("patients").select("*").eq("id", id).eq("clinic_id", clinicId).maybeSingle(),
         supabase.from("appointments").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("scheduled_at", { ascending: false }).limit(50),
         supabase.from("conversations").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
         supabase.from("doctor_notes").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
         supabase.from("consent_logs").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
+        supabase.from("prescriptions").select("*").eq("patient_id", id).eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(50),
       ]);
       return {
         patient: (p.data as Patient | null) ?? null,
@@ -46,6 +47,7 @@ function PatientDetail() {
         convs: (convs.data ?? []) as Conversation[],
         notes: (notes.data ?? []) as DoctorNote[],
         consents: (consents.data ?? []) as ConsentLog[],
+        prescriptions: (rx.data ?? []) as Prescription[],
       };
     },
   });
