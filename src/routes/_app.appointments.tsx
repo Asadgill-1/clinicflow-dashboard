@@ -166,14 +166,16 @@ function AppointmentsPage() {
 
   const buckets = useMemo(() => {
     const rows = apptsQ.data?.appts ?? [];
-    const by = (s: Appointment["status"]) =>
+    const byStatus = (s: Appointment["status"]) =>
       rows
         .filter((a) => a.status === s)
         .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+    const sortByTime = (a: Appointment, b: Appointment) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
     return {
-      requested: by("requested"),
-      confirmed: by("confirmed"),
-      cancelled: by("cancelled"),
+      requested: byStatus("requested"),
+      confirmed: rows.filter((a) => a.status === "confirmed" && a.attendance == null).sort(sortByTime),
+      cancelled: byStatus("cancelled"),
+      completed: rows.filter((a) => a.attendance != null).sort(sortByTime),
     };
   }, [apptsQ.data]);
 
