@@ -110,6 +110,7 @@ function PatientsPage() {
                     <TableHead>Language</TableHead>
                     <TableHead>Reliability</TableHead>
                     <TableHead>Flags</TableHead>
+                    <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
