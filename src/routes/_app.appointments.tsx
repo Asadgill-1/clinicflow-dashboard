@@ -179,7 +179,7 @@ function AppointmentsPage() {
     };
   }, [apptsQ.data]);
 
-  const renderCard = (a: Appointment, column: "requested" | "confirmed" | "cancelled") => {
+  const renderCard = (a: Appointment, column: "requested" | "confirmed" | "cancelled" | "completed") => {
     const p = apptsQ.data!.patientsById[a.patient_id];
     const isPending = pending?.id === a.id;
     const pendingKind = isPending ? pending!.kind : null;
