@@ -117,7 +117,11 @@ function PatientsPage() {
                   {patientsQ.data.patients.map((p) => {
                     const c = patientsQ.data!.counts[p.id] ?? { came: 0, no_show: 0 };
                     return (
-                      <TableRow key={p.id} className="hover:bg-muted/40">
+                      <TableRow
+                        key={p.id}
+                        className="hover:bg-muted/40 cursor-pointer"
+                        onClick={() => navigate({ to: "/patients/$id", params: { id: p.id } })}
+                      >
                         <TableCell>
                           <Link to="/patients/$id" params={{ id: p.id }} className="font-medium hover:underline">
                             {p.name ?? "Unnamed"}
@@ -140,6 +144,9 @@ function PatientsPage() {
                           ) : (
                             <StatusBadge tone="warning">No PDPL</StatusBadge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ChevronRight className="size-4 text-muted-foreground inline" />
                         </TableCell>
                       </TableRow>
                     );
