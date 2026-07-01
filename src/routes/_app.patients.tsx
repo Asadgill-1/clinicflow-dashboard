@@ -9,7 +9,7 @@ import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@
 import { StatusBadge, patientStatusTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
 import type { Patient, Appointment } from "@/lib/types";
-import { Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 
 export const Route = createFileRoute("/_app/patients")({
   component: PatientsPage,
