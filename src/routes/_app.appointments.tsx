@@ -350,30 +350,90 @@ function AppointmentsPage() {
         <TableSkeleton rows={6} cols={3} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {columns.map((col) => {
-            const items = buckets[col.key];
-            return (
-              <Card key={col.key}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <StatusBadge tone={appointmentStatusTone(col.key)}>{col.label}</StatusBadge>
-                    </span>
-                    <span className="text-xs tabular text-muted-foreground">{items.length}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-                    {items.length === 0 ? (
-                      <EmptyState title="No appointments" />
-                    ) : (
-                      items.map((a) => renderCard(a, col.key))
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {/* Column 1 — Requested */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <StatusBadge tone={appointmentStatusTone("requested")}>Requested</StatusBadge>
+                </span>
+                <span className="text-xs tabular text-muted-foreground">{buckets.requested.length}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                {buckets.requested.length === 0 ? (
+                  <EmptyState title="No appointments" />
+                ) : (
+                  buckets.requested.map((a) => renderCard(a, "requested"))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Column 2 — Confirmed */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <StatusBadge tone={appointmentStatusTone("confirmed")}>Confirmed</StatusBadge>
+                </span>
+                <span className="text-xs tabular text-muted-foreground">{buckets.confirmed.length}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                {buckets.confirmed.length === 0 ? (
+                  <EmptyState title="No appointments" />
+                ) : (
+                  buckets.confirmed.map((a) => renderCard(a, "confirmed"))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Column 3 — Cancelled + Completed stacked */}
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <StatusBadge tone={appointmentStatusTone("cancelled")}>Cancelled</StatusBadge>
+                  </span>
+                  <span className="text-xs tabular text-muted-foreground">{buckets.cancelled.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                  {buckets.cancelled.length === 0 ? (
+                    <EmptyState title="No appointments" />
+                  ) : (
+                    buckets.cancelled.map((a) => renderCard(a, "cancelled"))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <StatusBadge tone="success">Completed</StatusBadge>
+                  </span>
+                  <span className="text-xs tabular text-muted-foreground">{buckets.completed.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                  {buckets.completed.length === 0 ? (
+                    <EmptyState title="No appointments" />
+                  ) : (
+                    buckets.completed.map((a) => renderCard(a, "completed"))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
