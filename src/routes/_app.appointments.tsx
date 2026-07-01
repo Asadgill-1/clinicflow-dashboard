@@ -326,11 +326,6 @@ function AppointmentsPage() {
     );
   };
 
-  const columns: Array<{ key: "requested" | "confirmed" | "cancelled"; label: string }> = [
-    { key: "requested", label: "Requested" },
-    { key: "confirmed", label: "Confirmed" },
-    { key: "cancelled", label: "Cancelled" },
-  ];
 
   return (
     <div className="space-y-4">
