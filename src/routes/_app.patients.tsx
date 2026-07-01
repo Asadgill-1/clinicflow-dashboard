@@ -16,6 +16,7 @@ export const Route = createFileRoute("/_app/patients")({
 });
 
 function PatientsPage() {
+  const navigate = useNavigate();
   const { clinicUser } = useAuth();
   const clinicId = clinicUser!.clinic_id;
   const isDoctorOnly = clinicUser!.role === "doctor";
