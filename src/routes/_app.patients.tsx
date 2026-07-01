@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -9,13 +9,14 @@ import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@
 import { StatusBadge, patientStatusTone } from "@/components/StatusBadge";
 import { TableSkeleton, EmptyState } from "@/components/States";
 import type { Patient, Appointment } from "@/lib/types";
-import { Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 
 export const Route = createFileRoute("/_app/patients")({
   component: PatientsPage,
 });
 
 function PatientsPage() {
+  const navigate = useNavigate();
   const { clinicUser } = useAuth();
   const clinicId = clinicUser!.clinic_id;
   const isDoctorOnly = clinicUser!.role === "doctor";
@@ -109,13 +110,18 @@ function PatientsPage() {
                     <TableHead>Language</TableHead>
                     <TableHead>Reliability</TableHead>
                     <TableHead>Flags</TableHead>
+                    <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {patientsQ.data.patients.map((p) => {
                     const c = patientsQ.data!.counts[p.id] ?? { came: 0, no_show: 0 };
                     return (
-                      <TableRow key={p.id} className="hover:bg-muted/40">
+                      <TableRow
+                        key={p.id}
+                        className="hover:bg-muted/40 cursor-pointer"
+                        onClick={() => navigate({ to: "/patients/$id", params: { id: p.id } })}
+                      >
                         <TableCell>
                           <Link to="/patients/$id" params={{ id: p.id }} className="font-medium hover:underline">
                             {p.name ?? "Unnamed"}
@@ -138,6 +144,9 @@ function PatientsPage() {
                           ) : (
                             <StatusBadge tone="warning">No PDPL</StatusBadge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ChevronRight className="size-4 text-muted-foreground inline" />
                         </TableCell>
                       </TableRow>
                     );
