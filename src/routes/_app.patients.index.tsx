@@ -11,7 +11,7 @@ import { TableSkeleton, EmptyState } from "@/components/States";
 import type { Patient, Appointment } from "@/lib/types";
 import { ChevronRight, Search } from "lucide-react";
 
-export const Route = createFileRoute("/_app/patients")({
+export const Route = createFileRoute("/_app/patients/")({
   component: PatientsPage,
 });
 
