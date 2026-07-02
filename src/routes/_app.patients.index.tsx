@@ -93,6 +93,12 @@ function PatientsPage() {
         </div>
       </div>
 
+      {patientsQ.data?.patients.length === 200 && (
+        <p className="text-xs text-muted-foreground bg-muted/50 border border-border rounded-md px-3 py-2">
+          Showing the first 200 patients — use search to find the rest.
+        </p>
+      )}
+
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Directory</CardTitle></CardHeader>
         <CardContent>

@@ -107,23 +107,28 @@ function AppointmentsPage() {
   const apptsQ = useQuery({
     queryKey: ["appointments", clinicId, isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
+      // fetch newest-first so the 200-cap drops ancient history, not fresh bookings,
+      // then re-sort ascending for display (hardening #16)
       let q = supabase
         .from("appointments")
         .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, attendance_marked_at, doctor, doctor_user_id")
         .eq("clinic_id", clinicId)
-        .order("scheduled_at", { ascending: true })
+        .order("scheduled_at", { ascending: false })
         .limit(200);
       if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
       const { data, error } = await q;
       if (error) throw error;
-      const appts = (data ?? []) as Appointment[];
+      const appts = ((data ?? []) as Appointment[]).sort(
+        (a, b) => new Date(a.scheduled_at ?? 0).getTime() - new Date(b.scheduled_at ?? 0).getTime(),
+      );
+      const capped = appts.length === 200;
       const ids = Array.from(new Set(appts.map((a) => a.patient_id)));
       let patientsById: Record<string, Patient> = {};
       if (ids.length) {
         const { data: p } = await supabase.from("patients").select("id, name").in("id", ids);
         patientsById = Object.fromEntries(((p ?? []) as Patient[]).map((x) => [x.id, x]));
       }
-      return { appts, patientsById };
+      return { appts, patientsById, capped };
     },
   });
 
@@ -345,6 +350,12 @@ function AppointmentsPage() {
           </Button>
         </div>
       </div>
+
+      {apptsQ.data?.capped && (
+        <p className="text-xs text-muted-foreground bg-muted/50 border border-border rounded-md px-3 py-2">
+          Showing the latest 200 appointments — older history is not displayed.
+        </p>
+      )}
 
       {apptsQ.isLoading ? (
         <TableSkeleton rows={6} cols={3} />
