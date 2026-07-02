@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { callAction } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,15 @@ function PatientDetail() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  // PDPL consent from the front desk (walk-ins who consented on paper). Audited in consent_logs.
+  const consentM = useMutation({
+    mutationFn: (granted: boolean) => callAction("set_consent", { patient_id: id, granted }),
+    onSuccess: (_d, granted) => {
+      toast.success(granted ? "PDPL consent recorded." : "PDPL consent revoked.");
+      qc.invalidateQueries({ queryKey: ["patient", id] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   if (patientQ.isLoading) return <div className="space-y-3"><TableSkeleton rows={6} cols={4} /></div>;
   const p = patientQ.data?.patient;
@@ -101,6 +111,17 @@ function PatientDetail() {
               {p.pdpl_consent
                 ? <StatusBadge tone="success">PDPL consent</StatusBadge>
                 : <StatusBadge tone="warning">No PDPL consent</StatusBadge>}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                disabled={consentM.isPending}
+                onClick={() => consentM.mutate(!p.pdpl_consent)}
+              >
+                {consentM.isPending
+                  ? <Loader2 className="size-3 animate-spin" />
+                  : p.pdpl_consent ? "Revoke consent" : "Record consent"}
+              </Button>
             </div>
           </div>
           <div className="text-sm text-right">
