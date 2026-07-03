@@ -67,7 +67,14 @@ function SettingsPage() {
   const q = useQuery({
     queryKey: ["clinic-settings", clinicId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clinics").select("*").eq("id", clinicId).maybeSingle();
+      // explicit columns only — webhook secrets / vault ids are not readable by clinic staff
+      const { data, error } = await supabase
+        .from("clinics")
+        .select(
+          "id, code, name, address, timezone, default_language, emergency_number, dha_license, booking_link, review_link, hours, ramadan_hours, services, accepted_insurance, active_offers, default_slot_min, parallel_capacity, status, billing_status",
+        )
+        .eq("id", clinicId)
+        .maybeSingle();
       if (error) throw error;
       return (data ?? null) as ClinicRow | null;
     },
