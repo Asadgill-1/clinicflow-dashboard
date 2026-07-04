@@ -22,9 +22,13 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
+  // /inbox?patient=<id> — deep link from the patient detail page
+  validateSearch: (s: Record<string, unknown>) => ({
+    patient: typeof s.patient === "string" ? s.patient : undefined,
+  }),
 });
 
-type Filter = "all" | "human_only" | "needs_human";
+type Filter = "all" | "human_only" | "monitoring";
 const DUBAI_TZ = "Asia/Dubai";
 
 function relTime(iso: string): string {
@@ -53,12 +57,31 @@ function InboxPage() {
   const clinicId = clinicUser!.clinic_id;
   const qc = useQueryClient();
 
+  const { patient: patientParam } = Route.useSearch();
   const [filter, setFilter] = useState<Filter>("all");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(patientParam ?? null);
   const [reply, setReply] = useState("");
+
+  // live inbox: realtime on conversations (added to supabase_realtime) + a slow
+  // poll as fallback — staff must never sit on a stale chat during a takeover
+  useEffect(() => {
+    const ch = supabase
+      .channel(`inbox-${clinicId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "conversations", filter: `clinic_id=eq.${clinicId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["inbox-threads", clinicId] });
+          qc.invalidateQueries({ queryKey: ["inbox-thread", clinicId] });
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [clinicId, qc]);
 
   const threadsQ = useQuery({
     queryKey: ["inbox-threads", clinicId, filter],
+    refetchInterval: 15_000,
     queryFn: async (): Promise<Thread[]> => {
       const { data: msgs, error } = await supabase
         .from("conversations")
@@ -91,7 +114,7 @@ function InboxPage() {
       }
       let list = Array.from(byPatient.values());
       if (filter === "human_only") list = list.filter((t) => t.patient?.status === "human_only");
-      else if (filter === "needs_human") list = list.filter((t) => t.patient?.status !== "human_only");
+      else if (filter === "monitoring") list = list.filter((t) => t.patient?.status === "monitoring");
       list.sort((a, b) => new Date(b.last.created_at).getTime() - new Date(a.last.created_at).getTime());
       return list.slice(0, 50);
     },
@@ -107,6 +130,7 @@ function InboxPage() {
   const threadQ = useQuery({
     queryKey: ["inbox-thread", clinicId, selected],
     enabled: !!selected,
+    refetchInterval: 10_000,
     queryFn: async () => {
       const [conv, pat] = await Promise.all([
         supabase
@@ -194,8 +218,8 @@ function InboxPage() {
             <SelectTrigger className="w-[180px] min-h-10"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All threads</SelectItem>
-              <SelectItem value="human_only">Being handled</SelectItem>
-              <SelectItem value="needs_human">Needs human</SelectItem>
+              <SelectItem value="human_only">Taken over</SelectItem>
+              <SelectItem value="monitoring">Monitoring</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={refetchAll} className="min-h-10">
@@ -362,6 +386,8 @@ function ThreadView({
           <EmptyState title="No messages yet" />
         ) : messages.map((m) => {
           const inbound = m.direction === "inbound";
+          // outbound sent by a HUMAN (dashboard reply or Telegram staff relay), not the AI
+          const humanSent = !inbound && ["staff_reply", "staff_relay"].includes(m.ai_action ?? "");
           return (
             <div
               key={m.id}
@@ -386,11 +412,12 @@ function ThreadView({
                   <span>{fmtTime(m.created_at, tz)}</span>
                   <span title={fmtDateTime(m.created_at, tz)}>· {fmtDateTime(m.created_at, tz)}</span>
                   {m.message_type && <span>· {m.message_type}</span>}
+                  {humanSent && <span className="text-primary font-medium">· staff</span>}
                 </div>
               </div>
               {!inbound && (
                 <div className="shrink-0 size-8 rounded-full bg-primary/15 grid place-items-center text-primary">
-                  <Bot className="size-4" />
+                  {humanSent ? <UserCog2 className="size-4" /> : <Bot className="size-4" />}
                 </div>
               )}
             </div>

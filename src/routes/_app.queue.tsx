@@ -218,9 +218,14 @@ function QueuePage() {
                   <div className="tabular text-3xl font-semibold">{myWaitingCount}</div>
                 </div>
               </div>
-              <Button size="lg" onClick={callNext} disabled={callingNext} className="min-h-14 text-base">
+              <Button
+                size="lg"
+                onClick={callNext}
+                disabled={callingNext || (myWaitingCount === 0 && !myServing)}
+                className="min-h-14 text-base"
+              >
                 {callingNext ? <Loader2 className="size-5 mr-2 animate-spin" /> : <PhoneCall className="size-5 mr-2" />}
-                {myWaitingCount === 0 && !myServing ? "No one waiting" : "Next patient"}
+                {myWaitingCount === 0 && !myServing ? "No one waiting" : myWaitingCount === 0 ? "Finish current" : "Next patient"}
               </Button>
             </div>
           </CardContent>

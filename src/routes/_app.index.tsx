@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -13,16 +13,21 @@ export const Route = createFileRoute("/_app/")({
   component: Overview,
 });
 
+// midnight-to-midnight of the CLINIC's day, as UTC instants — independent of the
+// viewer's machine timezone (was browser-local; wrong day when viewed from abroad)
 function startEndOfTodayInTZ(tz: string) {
+  const now = new Date();
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
   });
-  const parts = fmt.formatToParts(new Date());
-  const y = parts.find((p) => p.type === "year")!.value;
-  const m = parts.find((p) => p.type === "month")!.value;
-  const d = parts.find((p) => p.type === "day")!.value;
-  // approximate: use ISO local time; backend filtering tolerates either
-  const start = new Date(`${y}-${m}-${d}T00:00:00`);
+  const parts = fmt.formatToParts(now);
+  const y = +parts.find((p) => p.type === "year")!.value;
+  const m = +parts.find((p) => p.type === "month")!.value;
+  const d = +parts.find((p) => p.type === "day")!.value;
+  const asUtc = new Date(now.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+  const asTz = new Date(now.toLocaleString("en-US", { timeZone: tz })).getTime();
+  const offsetMs = asTz - asUtc; // e.g. Dubai = +4h
+  const start = new Date(Date.UTC(y, m - 1, d) - offsetMs);
   const end = new Date(start.getTime() + 24 * 3600 * 1000);
   return { start: start.toISOString(), end: end.toISOString() };
 }
@@ -31,30 +36,42 @@ function Overview() {
   const { clinicUser, clinic } = useAuth();
   const tz = clinic?.timezone || "UTC";
   const clinicId = clinicUser!.clinic_id;
+  const isDoctorOnly = clinicUser!.role === "doctor";
 
   const todayQ = useQuery({
-    queryKey: ["overview", clinicId, "today"],
+    queryKey: ["overview", clinicId, "today", isDoctorOnly ? clinicUser!.id : "all"],
     queryFn: async () => {
       const { start, end } = startEndOfTodayInTZ(tz);
+      // doctors see their own appointment numbers; owner/reception see the clinic's
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scoped = <T,>(q: T): T => (isDoctorOnly ? (q as any).eq("doctor_user_id", clinicUser!.id) : q) as T;
       const [todayAppts, weekNoShows, weekPatients, pending, ratings] = await Promise.all([
-        supabase.from("appointments")
-          .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, doctor")
-          .eq("clinic_id", clinicId)
-          .gte("scheduled_at", start).lt("scheduled_at", end)
-          .order("scheduled_at", { ascending: true }),
-        supabase.from("appointments")
-          .select("id", { count: "exact", head: true })
-          .eq("clinic_id", clinicId)
-          .eq("attendance", "no_show")
-          .gte("scheduled_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        scoped(
+          supabase.from("appointments")
+            .select("id, appointment_number, patient_id, reason, scheduled_at, duration_min, status, attendance, doctor")
+            .eq("clinic_id", clinicId)
+            .gte("scheduled_at", start).lt("scheduled_at", end),
+        ).order("scheduled_at", { ascending: true }),
+        scoped(
+          supabase.from("appointments")
+            .select("id", { count: "exact", head: true })
+            .eq("clinic_id", clinicId)
+            .eq("attendance", "no_show")
+            .gte("scheduled_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        ),
+        // NEW patients = registered in the last 7 days (was last_visit — that counted returning visitors)
         supabase.from("patients")
           .select("id", { count: "exact", head: true })
           .eq("clinic_id", clinicId)
-          .gte("last_visit", new Date(Date.now() - 7 * 86400000).toISOString()),
-        supabase.from("appointments")
-          .select("id", { count: "exact", head: true })
-          .eq("clinic_id", clinicId)
-          .eq("status", "requested"),
+          .gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        // pending = requests whose time hasn't passed yet (stale old requests no longer inflate this)
+        scoped(
+          supabase.from("appointments")
+            .select("id", { count: "exact", head: true })
+            .eq("clinic_id", clinicId)
+            .eq("status", "requested")
+            .gte("scheduled_at", new Date().toISOString()),
+        ),
         supabase.from("reviews")
           .select("rating")
           .eq("clinic_id", clinicId)
@@ -95,19 +112,21 @@ function Overview() {
           <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
           <p className="text-sm text-muted-foreground">
             {new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeZone: tz }).format(new Date())}
+            {isDoctorOnly && <span className="ml-2 italic">Showing: my patients</span>}
           </p>
         </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Kpi label="Today's appointments" value={todayQ.data?.kpis.today} icon={<CalendarClock className="size-4" />} />
-        <Kpi label="Pending confirmations" value={todayQ.data?.kpis.pending} icon={<CalendarCheck2 className="size-4" />} />
-        <Kpi label="No-shows (7d)" value={todayQ.data?.kpis.noShows} icon={<UserX className="size-4" />} />
-        <Kpi label="New patients (7d)" value={todayQ.data?.kpis.newPatients} icon={<UserPlus className="size-4" />} />
+        <Kpi label="Today's appointments" value={todayQ.data?.kpis.today} icon={<CalendarClock className="size-4" />} to="/appointments" />
+        <Kpi label="Pending confirmations" value={todayQ.data?.kpis.pending} icon={<CalendarCheck2 className="size-4" />} to="/appointments" />
+        <Kpi label="No-shows (7d)" value={todayQ.data?.kpis.noShows} icon={<UserX className="size-4" />} to="/appointments" />
+        <Kpi label="New patients (7d)" value={todayQ.data?.kpis.newPatients} icon={<UserPlus className="size-4" />} to="/patients" />
         <Kpi
           label="Avg rating (30d)"
           value={todayQ.data?.kpis.avgRating == null ? "—" : todayQ.data.kpis.avgRating.toFixed(2)}
           icon={<Star className="size-4" />}
+          to="/reviews"
         />
       </div>
 
@@ -151,9 +170,9 @@ function Overview() {
   );
 }
 
-function Kpi({ label, value, icon }: { label: string; value: number | string | undefined; icon: React.ReactNode }) {
-  return (
-    <Card>
+function Kpi({ label, value, icon, to }: { label: string; value: number | string | undefined; icon: React.ReactNode; to?: string }) {
+  const card = (
+    <Card className={to ? "transition-colors hover:border-primary/50 cursor-pointer h-full" : undefined}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between text-muted-foreground text-xs">
           <span>{label}</span>
@@ -163,4 +182,5 @@ function Kpi({ label, value, icon }: { label: string; value: number | string | u
       </CardContent>
     </Card>
   );
+  return to ? <Link to={to as never} className="block">{card}</Link> : card;
 }

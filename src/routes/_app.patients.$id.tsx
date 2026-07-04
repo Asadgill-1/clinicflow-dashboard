@@ -15,8 +15,9 @@ import { StatusBadge, patientStatusTone, appointmentStatusTone, attendanceTone }
 import { TableSkeleton, EmptyState } from "@/components/States";
 import { fmtDateTime } from "@/lib/format";
 import type { Patient, Appointment, Conversation, DoctorNote, ConsentLog, Prescription } from "@/lib/types";
-import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Loader2 } from "lucide-react";
+import { ArrowLeft, MessageSquare, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Loader2, CalendarPlus, MessagesSquare } from "lucide-react";
 import { PrescriptionForm, PrescriptionCard } from "@/components/Prescriptions";
+import { NewAppointmentDialog, type DoctorRow } from "./_app.appointments";
 import { toast } from "sonner";
 
 
@@ -55,6 +56,21 @@ function PatientDetail() {
   });
 
   const [noteDraft, setNoteDraft] = useState("");
+  const [bookOpen, setBookOpen] = useState(false);
+
+  const doctorsQ = useQuery({
+    queryKey: ["clinic-doctors", clinicId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clinic_users")
+        .select("id, name, role, room_number")
+        .eq("clinic_id", clinicId)
+        .in("role", ["doctor", "owner"])
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as DoctorRow[];
+    },
+  });
   const addNote = useMutation({
     mutationFn: async () => {
       const text = noteDraft.trim();
@@ -124,15 +140,38 @@ function PatientDetail() {
               </Button>
             </div>
           </div>
-          <div className="text-sm text-right">
-            <div className="text-muted-foreground text-xs">Reliability</div>
-            <div className="tabular">
-              <span className="text-success">{came}</span> came ·{" "}
-              <span className="text-destructive">{noShow}</span> no-show
+          <div className="flex flex-col items-end gap-2">
+            <div className="text-sm text-right">
+              <div className="text-muted-foreground text-xs">Reliability</div>
+              <div className="tabular">
+                <span className="text-success">{came}</span> came ·{" "}
+                <span className="text-destructive">{noShow}</span> no-show
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="min-h-9" onClick={() => setBookOpen(true)}>
+                <CalendarPlus className="size-3.5 mr-1.5" /> Book appointment
+              </Button>
+              {p.channel === "telegram" && (
+                <Button size="sm" variant="outline" className="min-h-9" asChild>
+                  <Link to="/inbox" search={{ patient: p.id }}>
+                    <MessagesSquare className="size-3.5 mr-1.5" /> Open chat
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
+
+      <NewAppointmentDialog
+        open={bookOpen}
+        onOpenChange={setBookOpen}
+        clinicId={clinicId}
+        doctors={doctorsQ.data ?? []}
+        fixedPatient={{ id: p.id, name: p.name }}
+        onBooked={() => qc.invalidateQueries({ queryKey: ["patient", id] })}
+      />
 
       <PatientInfoCard patient={p} clinicId={clinicId} />
 

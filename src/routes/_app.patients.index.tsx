@@ -44,7 +44,8 @@ function PatientsPage() {
         .eq("clinic_id", clinicId)
         .order("name", { ascending: true })
         .limit(200);
-      if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
+      const s = search.trim().replace(/[,()]/g, ""); // or() syntax chars
+      if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,emirates_id.ilike.%${s}%`);
       if (allowed) q = q.in("id", Array.from(allowed));
       const { data, error } = await q;
       if (error) throw error;
@@ -86,7 +87,7 @@ function PatientsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name…"
+            placeholder="Name, phone, Emirates ID…"
             className="pl-9 w-[280px] min-h-10"
             aria-label="Search patients"
           />

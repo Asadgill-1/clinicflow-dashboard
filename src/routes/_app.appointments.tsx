@@ -154,6 +154,8 @@ function AppointmentsPage() {
       }
       if (res.reason === "closed") {
         toast.error("Clinic is closed that day.");
+      } else if (res.reason === "past") {
+        toast.error("That time is already in the past.");
       } else if (res.reason === "taken") {
         // caller handles nextFree UI
       } else {
@@ -169,20 +171,37 @@ function AppointmentsPage() {
   };
 
 
+  const [search, setSearch] = useState("");
+
   const buckets = useMemo(() => {
-    const rows = apptsQ.data?.appts ?? [];
-    const byStatus = (s: Appointment["status"]) =>
-      rows
-        .filter((a) => a.status === s)
-        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+    let rows = apptsQ.data?.appts ?? [];
+    const pById = apptsQ.data?.patientsById ?? {};
+    const s = search.trim().toLowerCase();
+    if (s) {
+      rows = rows.filter((a) =>
+        (pById[a.patient_id]?.name ?? "").toLowerCase().includes(s) ||
+        (a.appointment_number ?? "").toLowerCase().includes(s) ||
+        (a.reason ?? "").toLowerCase().includes(s),
+      );
+    }
     const sortByTime = (a: Appointment, b: Appointment) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+    const byStatus = (st: Appointment["status"]) => rows.filter((a) => a.status === st).sort(sortByTime);
+    // finished/cancelled: last 7 days only — the full history lives on each patient's page
+    const weekAgo = Date.now() - 7 * 86400000;
+    const recent = (a: Appointment) => new Date(a.scheduled_at ?? 0).getTime() >= weekAgo;
     return {
       requested: byStatus("requested"),
       confirmed: rows.filter((a) => a.status === "confirmed" && a.attendance == null).sort(sortByTime),
-      cancelled: byStatus("cancelled"),
-      completed: rows.filter((a) => a.attendance != null).sort(sortByTime),
+      cancelled: byStatus("cancelled").filter(recent),
+      completed: rows.filter((a) => a.attendance != null && recent(a)).sort(sortByTime),
     };
-  }, [apptsQ.data]);
+  }, [apptsQ.data, search]);
+
+  // tokens are for a patient standing at reception TODAY — hide Issue on past/cancelled/finished cards
+  const canIssueToken = (a: Appointment) =>
+    a.status !== "cancelled" && a.attendance == null &&
+    !!a.scheduled_at &&
+    new Date(a.scheduled_at).toLocaleDateString("en-CA", { timeZone: tz }) === todayStr;
 
   const renderCard = (a: Appointment, column: "requested" | "confirmed" | "cancelled" | "completed") => {
     const p = apptsQ.data!.patientsById[a.patient_id];
@@ -213,6 +232,7 @@ function AppointmentsPage() {
           <RowActions
             appt={a}
             pendingKind={pendingKind}
+            canIssue={canIssueToken(a)}
             doctors={doctorsQ.data ?? []}
             onConfirm={() =>
               runAction(a.id, "confirm", "appt_confirm", { appointment_id: a.id }, "Patient notified — confirmed.")
@@ -267,6 +287,7 @@ function AppointmentsPage() {
           )}
           <TokenCell
             token={tokensQ.data?.[a.id] ?? null}
+            canIssue={canIssueToken(a)}
             onIssue={() => setIssueAppt(a)}
           />
         </div>
@@ -345,6 +366,13 @@ function AppointmentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, ref, service…"
+            className="w-[240px] min-h-10"
+            aria-label="Search appointments"
+          />
           <Button onClick={() => setNewOpen(true)} className="min-h-10">
             <Plus className="size-4 mr-1" /> New appointment
           </Button>
@@ -410,6 +438,7 @@ function AppointmentsPage() {
                 <CardTitle className="text-base flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
                     <StatusBadge tone={appointmentStatusTone("cancelled")}>Cancelled</StatusBadge>
+                    <span className="text-xs font-normal text-muted-foreground">last 7 days</span>
                   </span>
                   <span className="text-xs tabular text-muted-foreground">{buckets.cancelled.length}</span>
                 </CardTitle>
@@ -429,7 +458,8 @@ function AppointmentsPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
-                    <StatusBadge tone="success">Completed</StatusBadge>
+                    <StatusBadge tone="success">Finished</StatusBadge>
+                    <span className="text-xs font-normal text-muted-foreground">came + no-show · last 7 days</span>
                   </span>
                   <span className="text-xs tabular text-muted-foreground">{buckets.completed.length}</span>
                 </CardTitle>
@@ -480,10 +510,11 @@ function AppointmentsPage() {
 
 
 function RowActions({
-  appt, pendingKind, doctors, onConfirm, onCancel, onReschedule, onAssignDoctor, onMarkAttendance, onOpen, onIssueToken,
+  appt, pendingKind, canIssue, doctors, onConfirm, onCancel, onReschedule, onAssignDoctor, onMarkAttendance, onOpen, onIssueToken,
 }: {
   appt: Appointment;
   pendingKind: string | null;
+  canIssue: boolean;
   doctors: DoctorRow[];
   onConfirm: () => void;
   onCancel: () => void;
@@ -504,7 +535,7 @@ function RowActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem onSelect={onOpen}>Open patient</DropdownMenuItem>
-        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onIssueToken(); }}>
+        <DropdownMenuItem disabled={!canIssue} onSelect={(e) => { e.preventDefault(); onIssueToken(); }}>
           <Ticket className="size-4 mr-2 text-primary" /> Issue token
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -554,13 +585,13 @@ function RowActions({
         </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          disabled={busy}
+          disabled={busy || appt.status !== "confirmed"}
           onSelect={(e) => { e.preventDefault(); onMarkAttendance("came"); }}
         >
           {pendingKind === "came" ? Spin : <CheckCircle2 className="size-4 mr-2 text-success" />} Mark came
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled={busy}
+          disabled={busy || appt.status !== "confirmed"}
           onSelect={(e) => { e.preventDefault(); onMarkAttendance("no_show"); }}
         >
           {pendingKind === "no_show" ? Spin : <XCircle className="size-4 mr-2 text-destructive" />} Mark no-show
@@ -632,6 +663,8 @@ function RescheduleDialog({
         setConflict({ nextFree: res.nextFree });
       } else if (res.reason === "closed") {
         toast.error("Clinic is closed that day.");
+      } else if (res.reason === "past") {
+        toast.error("That time is already in the past.");
       } else {
         toast.error(res.message || `Reschedule failed: ${res.reason || "unknown"}`);
       }
@@ -655,7 +688,7 @@ function RescheduleDialog({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="r-date">Date</Label>
-            <Input id="r-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input id="r-date" type="date" value={date} min={new Date().toLocaleDateString("en-CA", { timeZone: DUBAI_TZ })} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="r-time">Time</Label>
@@ -700,14 +733,16 @@ interface ClinicService {
   duration_min?: number;
 }
 
-function NewAppointmentDialog({
-  open, onOpenChange, clinicId, doctors, onBooked,
+export function NewAppointmentDialog({
+  open, onOpenChange, clinicId, doctors, onBooked, fixedPatient,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   clinicId: string;
   doctors: DoctorRow[];
   onBooked: () => void;
+  /** book for an EXISTING patient (from their detail page) — skips the name/phone fields */
+  fixedPatient?: { id: string; name: string | null };
 }) {
   const tz = DUBAI_TZ;
   const [name, setName] = useState("");
@@ -743,7 +778,7 @@ function NewAppointmentDialog({
   };
 
   const submit = async (overrideIso?: string) => {
-    if (!name.trim()) { toast.error("Patient name is required."); return; }
+    if (!fixedPatient && !name.trim()) { toast.error("Patient name is required."); return; }
     if (!service) { toast.error("Choose a service."); return; }
     const iso = overrideIso ?? (date && time ? toDubaiISO(date, time) : "");
     if (!iso) { toast.error("Pick a date and time."); return; }
@@ -751,8 +786,9 @@ function NewAppointmentDialog({
     setConflict(null);
     try {
       const res = await callAction("walk_in_book", {
-        name: name.trim(),
-        phone: phone.trim() || null,
+        ...(fixedPatient
+          ? { patient_id: fixedPatient.id }
+          : { name: name.trim(), phone: phone.trim() || null }),
         service,
         doctor_user_id: doctorId === "__none__" ? null : doctorId,
         preferred_datetime: iso,
@@ -766,6 +802,8 @@ function NewAppointmentDialog({
         setConflict({ nextFree: res.nextFree });
       } else if (res.reason === "closed") {
         toast.error("Clinic is closed that day.");
+      } else if (res.reason === "past") {
+        toast.error("That time is already in the past.");
       } else {
         toast.error(res.message || `Booking failed: ${res.reason || "unknown"}`);
       }
@@ -786,14 +824,22 @@ function NewAppointmentDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2 space-y-1.5">
-            <Label htmlFor="n-name">Patient full name *</Label>
-            <Input id="n-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sara Al Mansoori" />
-          </div>
-          <div className="col-span-2 space-y-1.5">
-            <Label htmlFor="n-phone">Phone (optional)</Label>
-            <Input id="n-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+971 ..." inputMode="tel" />
-          </div>
+          {fixedPatient ? (
+            <div className="col-span-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              Booking for <span className="font-medium">{fixedPatient.name ?? "this patient"}</span>
+            </div>
+          ) : (
+            <>
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="n-name">Patient full name *</Label>
+                <Input id="n-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sara Al Mansoori" />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="n-phone">Phone (optional)</Label>
+                <Input id="n-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+971 ..." inputMode="tel" />
+              </div>
+            </>
+          )}
           <div className="col-span-2 space-y-1.5">
             <Label>Service *</Label>
             <Select value={service} onValueChange={setService}>
@@ -833,7 +879,7 @@ function NewAppointmentDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="n-date">Date *</Label>
-            <Input id="n-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input id="n-date" type="date" value={date} min={new Date().toLocaleDateString("en-CA", { timeZone: DUBAI_TZ })} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="n-time">Time *</Label>
@@ -887,8 +933,9 @@ function statusDotClass(s: string) {
   return "bg-muted-foreground";
 }
 
-function TokenCell({ token, onIssue }: { token: TokenRow | null; onIssue: () => void }) {
+function TokenCell({ token, canIssue, onIssue }: { token: TokenRow | null; canIssue: boolean; onIssue: () => void }) {
   if (!token) {
+    if (!canIssue) return null; // past / cancelled / finished — a queue token makes no sense
     return (
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">—</span>
@@ -911,7 +958,7 @@ function TokenCell({ token, onIssue }: { token: TokenRow | null; onIssue: () => 
 
 /* ---------------- Issue Token Dialog ---------------- */
 
-interface DoctorRow {
+export interface DoctorRow {
   id: string;
   name: string | null;
   role: string;
