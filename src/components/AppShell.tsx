@@ -4,16 +4,20 @@ import { NAV } from "@/lib/nav";
 import { Button } from "@/components/ui/button";
 import { LogOut, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MfaButton, useMfaPending } from "@/components/MfaDialog";
 
 export function AppShell() {
   const { status, clinicUser, clinic, signOut } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // deep-link guard: a 2FA-enrolled session that hasn't entered its code goes back to /auth
+  const mfaPending = useMfaPending(status === "ready");
 
   if (status === "loading")
     return <div className="min-h-screen grid place-items-center text-muted-foreground">Loading…</div>;
   if (status === "signed_out") return <Navigate to="/auth" />;
   if (status === "no_access") return <Navigate to="/no-access" />;
+  if (mfaPending) return <Navigate to="/auth" />;
   if (!clinicUser) return null;
 
   const items = NAV.filter((n) => n.roles.includes(clinicUser.role));
@@ -86,6 +90,7 @@ export function AppShell() {
               <div className="text-sm font-medium">{clinicUser.name ?? clinicUser.email}</div>
               <div className="text-xs text-muted-foreground capitalize">{clinicUser.role}</div>
             </div>
+            <MfaButton />
             <Button variant="outline" size="sm" onClick={handleSignOut} className="min-h-9">
               <LogOut className="size-4" aria-hidden />
               <span className="hidden sm:inline">Sign out</span>

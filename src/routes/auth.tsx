@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Activity } from "lucide-react";
+import { Activity, KeyRound } from "lucide-react";
+import { MfaLoginStep, useMfaPending } from "@/components/MfaDialog";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -19,8 +20,35 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (status === "ready") return <Navigate to="/" />;
-  if (status === "no_access") return <Navigate to="/no-access" />;
+  // 2FA: a signed-in session with an enrolled factor must enter its code first
+  const signedIn = status === "ready" || status === "no_access";
+  const mfaPending = useMfaPending(signedIn);
+
+  if (signedIn && mfaPending) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-3">
+            <div className="inline-flex items-center gap-2 text-primary">
+              <KeyRound className="size-6" aria-hidden />
+              <span className="font-semibold tracking-tight">Two-factor authentication</span>
+            </div>
+            <CardDescription>One more step to sign in.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MfaLoginStep onVerified={() => navigate({ to: "/" })} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (status === "ready" && mfaPending === false) return <Navigate to="/" />;
+  if (status === "no_access" && mfaPending === false) return <Navigate to="/no-access" />;
+  if (signedIn) {
+    // mfaPending still resolving
+    return <div className="min-h-screen grid place-items-center text-muted-foreground">Loading…</div>;
+  }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +57,7 @@ function AuthPage() {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) setError(error);
-    else navigate({ to: "/" });
+    // success: the reactive redirects above take over (incl. the 2FA step)
   };
 
   return (
