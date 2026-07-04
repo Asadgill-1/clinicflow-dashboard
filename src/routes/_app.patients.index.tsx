@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { rxLastSeen, markRxSeen } from "@/lib/badges";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -21,6 +22,27 @@ function PatientsPage() {
   const clinicId = clinicUser!.clinic_id;
   const isDoctorOnly = clinicUser!.role === "doctor";
   const [search, setSearch] = useState("");
+  const qc = useQueryClient();
+
+  // "new Rx" attention: capture the last-seen mark BEFORE clearing it, so the chips
+  // for this visit still show which patients the doctor just wrote prescriptions for
+  const [rxSince] = useState(() => rxLastSeen(clinicId));
+  useEffect(() => {
+    markRxSeen(clinicId);
+    qc.invalidateQueries({ queryKey: ["nav-rx", clinicId] });
+  }, [clinicId, qc]);
+
+  const newRxQ = useQuery({
+    queryKey: ["rx-new", clinicId, rxSince],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("prescriptions")
+        .select("patient_id")
+        .eq("clinic_id", clinicId)
+        .gt("created_at", rxSince);
+      return new Set(((data ?? []) as { patient_id: string }[]).map((r) => r.patient_id));
+    },
+  });
 
   const patientsQ = useQuery({
     queryKey: ["patients", clinicId, search, isDoctorOnly ? clinicUser!.id : "all"],
@@ -145,6 +167,7 @@ function PatientsPage() {
                           <span className="text-muted-foreground text-xs ml-1">came / no-show</span>
                         </TableCell>
                         <TableCell className="space-x-1">
+                          {newRxQ.data?.has(p.id) && <StatusBadge tone="info">new Rx</StatusBadge>}
                           {p.is_minor && <StatusBadge tone="info">minor</StatusBadge>}
                           {p.pdpl_consent ? (
                             <StatusBadge tone="success">PDPL ✓</StatusBadge>

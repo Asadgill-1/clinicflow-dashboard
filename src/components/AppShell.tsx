@@ -1,10 +1,93 @@
 import { Link, Outlet, useNavigate, useRouterState, Navigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import { rxLastSeen } from "@/lib/badges";
 import { NAV } from "@/lib/nav";
 import { Button } from "@/components/ui/button";
 import { LogOut, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MfaButton, useMfaPending } from "@/components/MfaDialog";
+import type { ClinicUser } from "@/lib/types";
+
+// live attention counters for the sidebar:
+//  /appointments — pending booking requests (clears when staff confirm/reject)
+//  /patients     — prescriptions written since this device last opened Patients
+//                  (reception prints the Rx slip; doctors wrote it, so no badge for them)
+function useNavBadges(clinicUser: ClinicUser | null): Record<string, number> {
+  const qc = useQueryClient();
+  const clinicId = clinicUser?.clinic_id;
+  const isDoctorOnly = clinicUser?.role === "doctor";
+  const showRx = !!clinicUser && clinicUser.role !== "doctor";
+
+  const requestedQ = useQuery({
+    queryKey: ["nav-requested", clinicId, isDoctorOnly ? clinicUser!.id : "all"],
+    enabled: !!clinicId,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      let q = supabase
+        .from("appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("clinic_id", clinicId!)
+        .eq("status", "requested")
+        .gte("scheduled_at", new Date().toISOString());
+      if (isDoctorOnly) q = q.eq("doctor_user_id", clinicUser!.id);
+      const { count } = await q;
+      return count ?? 0;
+    },
+  });
+
+  const rxQ = useQuery({
+    queryKey: ["nav-rx", clinicId],
+    enabled: !!clinicId && showRx,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("prescriptions")
+        .select("id", { count: "exact", head: true })
+        .eq("clinic_id", clinicId!)
+        .gt("created_at", rxLastSeen(clinicId!));
+      return count ?? 0;
+    },
+  });
+
+  useEffect(() => {
+    if (!clinicId) return;
+    const ch = supabase
+      .channel(`nav-badges-${clinicId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "appointments", filter: `clinic_id=eq.${clinicId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["nav-requested", clinicId] });
+          qc.invalidateQueries({ queryKey: ["appointments", clinicId] });
+          qc.invalidateQueries({ queryKey: ["overview", clinicId] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "prescriptions", filter: `clinic_id=eq.${clinicId}` },
+        () => qc.invalidateQueries({ queryKey: ["nav-rx", clinicId] }),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [clinicId, qc]);
+
+  return {
+    "/appointments": requestedQ.data ?? 0,
+    "/patients": showRx ? (rxQ.data ?? 0) : 0,
+  };
+}
+
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-medium grid place-items-center tabular">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 export function AppShell() {
   const { status, clinicUser, clinic, signOut } = useAuth();
@@ -12,6 +95,7 @@ export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // deep-link guard: a 2FA-enrolled session that hasn't entered its code goes back to /auth
   const mfaPending = useMfaPending(status === "ready");
+  const badges = useNavBadges(clinicUser);
 
   if (status === "loading")
     return <div className="min-h-screen grid place-items-center text-muted-foreground">Loading…</div>;
@@ -63,6 +147,7 @@ export function AppShell() {
                   >
                     <Icon className="size-4" aria-hidden />
                     {item.label}
+                    <NavBadge count={badges[item.to] ?? 0} />
                   </Link>
                 </li>
               );
@@ -117,6 +202,7 @@ export function AppShell() {
                   >
                     <Icon className="size-4" aria-hidden />
                     {item.label}
+                    <NavBadge count={badges[item.to] ?? 0} />
                   </Link>
                 </li>
               );
