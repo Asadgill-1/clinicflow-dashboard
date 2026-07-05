@@ -85,7 +85,7 @@ function QueuePage() {
         .from("clinic_users")
         .select("id, clinic_id, auth_user_id, role, name, email")
         .eq("clinic_id", clinicId)
-        .in("role", ["doctor", "owner"])
+        .eq("role", "doctor")
         .order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as ClinicUser[];

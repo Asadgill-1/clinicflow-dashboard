@@ -97,7 +97,7 @@ function AppointmentsPage() {
         .from("clinic_users")
         .select("id, name, role, room_number")
         .eq("clinic_id", clinicId)
-        .in("role", ["doctor", "owner"])
+        .eq("role", "doctor")
         .order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as DoctorRow[];
@@ -987,7 +987,7 @@ function IssueTokenDialog({
         .from("clinic_users")
         .select("id, name, role, room_number")
         .eq("clinic_id", clinicId)
-        .in("role", ["doctor", "owner"])
+        .eq("role", "doctor")
         .order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as DoctorRow[];
