@@ -16,7 +16,7 @@ import { fmtTime, fmtDateTime } from "@/lib/format";
 import { callAction } from "@/lib/api-client";
 import type { Conversation, Patient } from "@/lib/types";
 import {
-  MessagesSquare, RefreshCw, Send, UserCog2, Bot, User as UserIcon, Loader2, HandMetal,
+  MessagesSquare, RefreshCw, Send, UserCog2, Bot, User as UserIcon, Loader2, HandMetal, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -120,9 +120,13 @@ function InboxPage() {
     },
   });
 
-  // Auto-select first thread when list loads
+  // Auto-select first thread when list loads — desktop only. On mobile the two panes
+  // show one at a time, so auto-selecting would skip past the thread list.
   useEffect(() => {
-    if (!selected && threadsQ.data && threadsQ.data.length > 0) {
+    if (
+      !selected && threadsQ.data && threadsQ.data.length > 0 &&
+      window.matchMedia("(min-width: 1024px)").matches
+    ) {
       setSelected(threadsQ.data[0].patient_id);
     }
   }, [threadsQ.data, selected]);
@@ -230,8 +234,8 @@ function InboxPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
-        {/* Thread list */}
-        <Card className="lg:max-h-[calc(100vh-220px)] overflow-hidden flex flex-col">
+        {/* Thread list — on mobile, hidden once a thread is open (single-pane) */}
+        <Card className={`lg:max-h-[calc(100vh-220px)] overflow-hidden flex-col ${selected ? "hidden lg:flex" : "flex"}`}>
           <CardHeader className="pb-2 shrink-0">
             <CardTitle className="text-base inline-flex items-center gap-2">
               <MessagesSquare className="size-4" /> Threads
@@ -292,8 +296,8 @@ function InboxPage() {
           </CardContent>
         </Card>
 
-        {/* Thread view */}
-        <Card className="lg:max-h-[calc(100vh-220px)] flex flex-col overflow-hidden">
+        {/* Thread view — on mobile, shown only when a thread is open (single-pane) */}
+        <Card className={`max-h-[70dvh] lg:max-h-[calc(100vh-220px)] flex-col overflow-hidden ${selected ? "flex" : "hidden lg:flex"}`}>
           {!selected ? (
             <div className="flex-1 grid place-items-center p-8">
               <EmptyState title="Select a conversation" hint="Pick a thread from the left." />
@@ -305,6 +309,7 @@ function InboxPage() {
           ) : (
             <ThreadView
               tz={tz}
+              onBack={() => setSelected(null)}
               messages={active.messages}
               patient={active.patient}
               reply={reply}
@@ -325,12 +330,13 @@ function InboxPage() {
 }
 
 function ThreadView({
-  tz, messages, patient, reply, setReply,
+  tz, onBack, messages, patient, reply, setReply,
   onTakeover, takeoverPending,
   onHandback, handbackPending,
   onSend, sendPending,
 }: {
   tz: string;
+  onBack: () => void;
   messages: Conversation[];
   patient: Patient | null;
   reply: string;
@@ -352,8 +358,17 @@ function ThreadView({
     <>
       <CardHeader className="pb-2 shrink-0 border-b border-border">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="text-base truncate">{patient?.name ?? "Unknown patient"}</CardTitle>
+          <div className="min-w-0 flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden shrink-0 -ml-2"
+              onClick={onBack}
+              aria-label="Back to threads"
+            >
+              <ArrowLeft className="size-5" />
+            </Button>
+            <div className="min-w-0">
             <div className="flex items-center gap-1.5 mt-1">
               <StatusBadge tone={patientStatusTone(patient?.status ?? null)}>
                 {patient?.status ?? "—"}
@@ -363,6 +378,7 @@ function ThreadView({
                   {patient.channel}
                 </span>
               )}
+            </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
