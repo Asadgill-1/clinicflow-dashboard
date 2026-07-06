@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { avgConsultMin, estWaitMin, runningBehind } from "@/lib/queue-math";
 import type { Token } from "@/lib/types";
 
 export const Route = createFileRoute("/display")({
@@ -65,12 +66,22 @@ function DisplayInner({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tokens")
-        .select("token_number, room_number, doctor_name, status, created_at, called_at")
+        .select("token_number, room_number, doctor_name, doctor_user_id, status, created_at, called_at, done_at")
         .eq("clinic_id", clinicId)
         .eq("issued_date", today)
         .order("token_number", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Array<Pick<Token, "token_number" | "room_number" | "doctor_name" | "status" | "created_at" | "called_at">>;
+      return (data ?? []) as Array<Pick<Token, "token_number" | "room_number" | "doctor_name" | "doctor_user_id" | "status" | "created_at" | "called_at" | "done_at">>;
+    },
+  });
+
+  // fallback avg for a line with no completed consults yet
+  const slotQ = useQuery({
+    queryKey: ["display-slot-min", clinicId],
+    staleTime: 10 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase.from("clinics").select("default_slot_min").eq("id", clinicId).maybeSingle();
+      return data?.default_slot_min ?? 15;
     },
   });
 
@@ -109,6 +120,36 @@ function DisplayInner({
   const waitingShown = waiting.slice(0, 12);
   const waitingMore = Math.max(0, waiting.length - waitingShown.length);
 
+  // per-doctor-line queue stats: avg consult min, per-waiting-token position +
+  // estimated wait, and whether any line is running behind. Pure math from the
+  // token timestamps (mirrors the backend), re-evaluated on the 1s clock.
+  const fallbackAvg = slotQ.data ?? 15;
+  const lineStats = useMemo(() => {
+    const byLine = new Map<string, typeof tokens>();
+    for (const t of tokens) {
+      const key = t.doctor_user_id ?? "__none__";
+      if (!byLine.has(key)) byLine.set(key, []);
+      byLine.get(key)!.push(t);
+    }
+    const avgByLine = new Map<string, number>();
+    const waitByToken = new Map<number, { position: number; est: number }>();
+    let behind = false;
+    for (const [key, line] of byLine) {
+      const avg = avgConsultMin(line.filter((t) => t.status === "done")) ?? fallbackAvg;
+      avgByLine.set(key, avg);
+      const srv = line.find((t) => t.status === "serving") ?? null;
+      const elapsed = srv
+        ? (srv.called_at ? Math.max(0, (now.getTime() - new Date(srv.called_at).getTime()) / 60000) : 0)
+        : null;
+      if (runningBehind(avg, elapsed)) behind = true;
+      const lineWaiting = line.filter((t) => t.status === "waiting").sort((a, b) => a.token_number - b.token_number);
+      lineWaiting.forEach((t, i) => {
+        waitByToken.set(t.token_number, { position: i + 1, est: Math.round(estWaitMin(i, avg, elapsed)) });
+      });
+    }
+    return { avgByLine, waitByToken, behind };
+  }, [tokens, now, fallbackAvg]);
+
   return (
     <div className="dark min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
       <style>{`
@@ -135,6 +176,13 @@ function DisplayInner({
           {clock}
         </div>
       </header>
+
+      {/* Running-behind banner (display-only) */}
+      {lineStats.behind && (
+        <div className="px-10 py-3 bg-amber-500/15 border-b border-amber-500/40 text-amber-500 text-xl md:text-2xl font-medium text-center">
+          Running a little behind schedule — thank you for your patience.
+        </div>
+      )}
 
       {/* Now serving */}
       <section className="flex-1 px-10 py-8 min-h-0">
@@ -180,9 +228,14 @@ function DisplayInner({
                     </span>
                   </div>
                 </div>
-                {t.doctor_name && (
+                {(t.doctor_name || lineStats.avgByLine.has(t.doctor_user_id ?? "__none__")) && (
                   <div className="mt-5 text-lg md:text-2xl text-muted-foreground truncate">
                     {t.doctor_name}
+                    {lineStats.avgByLine.has(t.doctor_user_id ?? "__none__") && (
+                      <span className="tabular">
+                        {t.doctor_name ? " · " : ""}~{Math.round(lineStats.avgByLine.get(t.doctor_user_id ?? "__none__")!)} min per patient
+                      </span>
+                    )}
                   </div>
                 )}
               </article>
@@ -200,19 +253,27 @@ function DisplayInner({
           <div className="text-2xl md:text-3xl text-muted-foreground">No one waiting.</div>
         ) : (
           <div className="flex flex-wrap gap-3">
-            {waitingShown.map((t, i) => (
-              <span
-                key={`${t.token_number}-${i}`}
-                className="tabular inline-flex items-baseline gap-2 rounded-xl border border-border bg-card px-5 py-3 text-2xl md:text-3xl font-semibold"
-              >
-                <span className="text-primary">#{t.token_number}</span>
-                {t.room_number && (
-                  <span className="text-muted-foreground text-xl md:text-2xl font-medium">
-                    · Room {t.room_number}
-                  </span>
-                )}
-              </span>
-            ))}
+            {waitingShown.map((t, i) => {
+              const w = lineStats.waitByToken.get(t.token_number);
+              return (
+                <span
+                  key={`${t.token_number}-${i}`}
+                  className="tabular inline-flex items-baseline gap-2 rounded-xl border border-border bg-card px-5 py-3 text-2xl md:text-3xl font-semibold"
+                >
+                  <span className="text-primary">#{t.token_number}</span>
+                  {t.room_number && (
+                    <span className="text-muted-foreground text-xl md:text-2xl font-medium">
+                      · Room {t.room_number}
+                    </span>
+                  )}
+                  {w && (
+                    <span className="text-muted-foreground text-xl md:text-2xl font-medium">
+                      · ~{w.est} min
+                    </span>
+                  )}
+                </span>
+              );
+            })}
             {waitingMore > 0 && (
               <span className="tabular inline-flex items-center rounded-xl border border-dashed border-border px-5 py-3 text-2xl md:text-3xl font-medium text-muted-foreground">
                 +{waitingMore} more

@@ -117,10 +117,12 @@ export interface Token {
   doctor_user_id: string | null;
   doctor_name: string | null;
   room_number: string | null;
+  appointment_id: string | null;
   status: "waiting" | "serving" | "done" | "skipped";
   created_at: string;
   called_at: string | null;
   done_at: string | null;
+  notified_remaining: number | null;
 }
 
 export interface ConsentLog {

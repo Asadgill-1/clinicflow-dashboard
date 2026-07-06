@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge, appointmentStatusTone, attendanceTone } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/States";
-import { fmtDateTime } from "@/lib/format";
+import { fmtDateTime, fmtTime } from "@/lib/format";
+import { avgConsultMin } from "@/lib/queue-math";
 import {
-  Ticket as TicketIcon, Plus, RefreshCcw, Monitor, Loader2, Printer, SkipForward, PhoneCall,
+  Ticket as TicketIcon, Plus, RefreshCcw, Monitor, Loader2, Printer, SkipForward, PhoneCall, CalendarCheck,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +54,7 @@ function QueuePage() {
   const isDoctor = hasRole("doctor", "owner");
 
   const [issueOpen, setIssueOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [slip, setSlip] = useState<Token | null>(null);
   const [callingNext, setCallingNext] = useState(false);
   const [skipping, setSkipping] = useState<string | null>(null);
@@ -131,6 +133,7 @@ function QueuePage() {
   const myTokens = myDoctorRow ? (byDoctor[myDoctorRow.id]?.tokens ?? []) : [];
   const myServing = myTokens.find((t) => t.status === "serving") ?? null;
   const myWaitingCount = myTokens.filter((t) => t.status === "waiting").length;
+  const myAvg = avgConsultMin(myTokens.filter((t) => t.status === "done"));
 
   const refetchAll = () => qc.invalidateQueries({ queryKey: ["tokens", clinicId] });
 
@@ -185,6 +188,9 @@ function QueuePage() {
           <Button variant="outline" size="sm" onClick={openDisplay} className="min-h-10">
             <Monitor className="size-4 mr-1" /> Open display
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} className="min-h-10">
+            <CalendarCheck className="size-4 mr-1" /> Issue today’s tokens
+          </Button>
           <Button onClick={() => setIssueOpen(true)} className="min-h-10">
             <Plus className="size-4 mr-1" /> Issue token
           </Button>
@@ -216,6 +222,11 @@ function QueuePage() {
                 <div>
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">Waiting</div>
                   <div className="tabular text-3xl font-semibold">{myWaitingCount}</div>
+                </div>
+                <div className="hidden md:block h-12 w-px bg-border" />
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Avg consult</div>
+                  <div className="tabular text-3xl font-semibold">{myAvg !== null ? `${Math.round(myAvg)}m` : "—"}</div>
                 </div>
               </div>
               <Button
@@ -321,6 +332,17 @@ function QueuePage() {
         clinicId={clinicId}
         doctors={doctors}
         onIssued={(t) => { setSlip(t); refetchAll(); }}
+      />
+
+      <BulkIssueDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        clinicId={clinicId}
+        doctors={doctors}
+        tokens={tokens}
+        today={today}
+        tz={clinic?.timezone || DUBAI_TZ}
+        onDone={refetchAll}
       />
 
       <SlipDialog
@@ -537,6 +559,187 @@ function IssueTokenDialog({
           <Button onClick={submit} disabled={submitting}>
             {submitting && <Loader2 className="size-4 mr-1 animate-spin" />}
             Issue token
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Bulk Issue (morning routine) ---------------- */
+
+type BulkAppt = {
+  id: string;
+  appointment_number: string | null;
+  patient_id: string | null;
+  reason: string | null;
+  scheduled_at: string;
+  doctor_user_id: string | null;
+  patients: { name: string | null } | null;
+};
+
+function BulkIssueDialog({
+  open, onOpenChange, clinicId, doctors, tokens, today, tz, onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  clinicId: string;
+  doctors: ClinicUser[];
+  tokens: Token[];
+  today: string;
+  tz: string;
+  onDone: () => void;
+}) {
+  const [rows, setRows] = useState<Record<string, { checked: boolean; doctorUserId: string }>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState("");
+
+  const apptsQ = useQuery({
+    queryKey: ["bulk-today-appts", clinicId, today],
+    enabled: open,
+    queryFn: async () => {
+      // generous UTC window, exact clinic-local-date filter client-side
+      const from = new Date(Date.now() - 12 * 3600_000).toISOString();
+      const to = new Date(Date.now() + 36 * 3600_000).toISOString();
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("id, appointment_number, patient_id, reason, scheduled_at, doctor_user_id, patients(name)")
+        .eq("clinic_id", clinicId).eq("status", "confirmed")
+        .not("scheduled_at", "is", null)
+        .gte("scheduled_at", from).lte("scheduled_at", to)
+        .order("scheduled_at", { ascending: true });
+      if (error) throw error;
+      return ((data ?? []) as unknown as BulkAppt[]).filter((a) =>
+        new Date(a.scheduled_at).toLocaleDateString("en-CA", { timeZone: tz }) === today);
+    },
+  });
+
+  // appointments that already have a token today are done — hide them
+  const tokenApptIds = useMemo(
+    () => new Set(tokens.map((t) => t.appointment_id).filter(Boolean)),
+    [tokens],
+  );
+  const appts = useMemo(
+    () => (apptsQ.data ?? []).filter((a) => !tokenApptIds.has(a.id)),
+    [apptsQ.data, tokenApptIds],
+  );
+
+  // seed row state: checked, doctor prefilled from the appointment (or the only doctor)
+  useEffect(() => {
+    if (!open) { setRows({}); return; }
+    setRows((prev) => {
+      const next = { ...prev };
+      for (const a of appts) {
+        if (!next[a.id]) {
+          next[a.id] = {
+            checked: true,
+            doctorUserId: a.doctor_user_id ?? (doctors.length === 1 ? doctors[0].id : ""),
+          };
+        }
+      }
+      return next;
+    });
+  }, [open, appts, doctors]);
+
+  const selected = appts.filter((a) => rows[a.id]?.checked);
+  const missingDoctor = selected.some((a) => !rows[a.id]?.doctorUserId);
+
+  const submit = async () => {
+    if (missingDoctor) { toast.error("Choose a doctor for every selected appointment."); return; }
+    setSubmitting(true);
+    let issued = 0;
+    const fails: string[] = [];
+    // ponytail: sequential frontend loop (keeps token_number in schedule order and stays
+    // idempotent via issue_token's per-appointment dedupe); >60 same-morning appointments
+    // would near the 120/min rate limit — upgrade path is one bulk_issue_tokens action.
+    for (let i = 0; i < selected.length; i++) {
+      const a = selected[i];
+      setProgress(`Issuing ${i + 1}/${selected.length}…`);
+      try {
+        const docId = rows[a.id].doctorUserId;
+        // issue_token only auto-assigns when the appointment has NO doctor; an explicit
+        // reassignment needs appt_assign_doctor first
+        if (a.doctor_user_id && a.doctor_user_id !== docId) {
+          await callAction("appt_assign_doctor", { appointment_id: a.id, doctor_user_id: docId });
+        }
+        const res = await callAction<{ ok: boolean; reason?: string; message?: string }>("issue_token", {
+          appointment_id: a.id, patient_id: a.patient_id, doctor_user_id: docId, service: a.reason ?? null,
+        });
+        if (res.ok) issued++;
+        else fails.push(a.appointment_number ?? a.id.slice(0, 6));
+      } catch {
+        fails.push(a.appointment_number ?? a.id.slice(0, 6));
+      }
+    }
+    setSubmitting(false);
+    setProgress("");
+    if (fails.length) toast.error(`Issued ${issued}, failed: ${fails.join(", ")} — re-open the dialog to retry.`);
+    else toast.success(`Issued ${issued} token${issued === 1 ? "" : "s"}.`);
+    onDone();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!submitting) onOpenChange(o); }}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Issue today’s tokens</DialogTitle>
+          <DialogDescription>
+            Confirmed appointments today without a token. Tokens are issued in appointment-time order.
+          </DialogDescription>
+        </DialogHeader>
+
+        {apptsQ.isLoading ? (
+          <div className="py-6 text-sm text-muted-foreground">Loading…</div>
+        ) : appts.length === 0 ? (
+          <div className="py-6 text-sm text-muted-foreground">
+            Nothing to issue — every confirmed appointment today already has a token.
+          </div>
+        ) : (
+          <div className="max-h-80 overflow-auto rounded-md border border-border divide-y divide-border">
+            {appts.map((a) => {
+              const r = rows[a.id] ?? { checked: true, doctorUserId: "" };
+              return (
+                <div key={a.id} className="flex items-center gap-3 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary shrink-0"
+                    checked={r.checked}
+                    onChange={(e) => setRows((p) => ({ ...p, [a.id]: { ...r, checked: e.target.checked } }))}
+                    aria-label={`Include ${a.patients?.name ?? "patient"}`}
+                  />
+                  <span className="tabular text-sm text-muted-foreground w-14 shrink-0">
+                    {fmtTime(a.scheduled_at, tz)}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate text-sm font-medium">
+                    {a.patients?.name ?? "—"}
+                    {a.reason && <span className="text-muted-foreground font-normal"> · {a.reason}</span>}
+                  </span>
+                  <Select
+                    value={r.doctorUserId}
+                    onValueChange={(v) => setRows((p) => ({ ...p, [a.id]: { ...r, doctorUserId: v } }))}
+                  >
+                    <SelectTrigger className="w-40 min-h-9 shrink-0">
+                      <SelectValue placeholder="Doctor…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doctors.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name ?? d.email ?? "Doctor"}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter className="items-center gap-3">
+          {progress && <span className="text-sm text-muted-foreground tabular">{progress}</span>}
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+          <Button onClick={submit} disabled={submitting || selected.length === 0 || missingDoctor}>
+            {submitting && <Loader2 className="size-4 mr-1 animate-spin" />}
+            Issue {selected.length} token{selected.length === 1 ? "" : "s"}
           </Button>
         </DialogFooter>
       </DialogContent>
